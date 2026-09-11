@@ -1,0 +1,299 @@
+import "server-only";
+import { prisma } from "@/lib/prisma";
+import { buildBarcodeValue, buildQrPayload } from "@/lib/codes";
+import { nextGarmentCodeBlock } from "@/lib/sequence";
+import {
+  buildPipeline,
+  garmentStatusFor,
+  orderStatusForStage,
+  STAGE_ORDER,
+} from "@/lib/workflow";
+import type { Prisma } from "@/generated/prisma/client";
+import type {
+  GarmentStatus,
+  OrderStatus,
+  ProcessingStage,
+  TaskStatus,
+} from "@/generated/prisma/enums";
+
+type Tx = Prisma.TransactionClient;
+
+export interface GarmentSeed {
+  orderItemId: string;
+  garmentTypeId: string;
+  serviceId: string;
+  serviceStages: ProcessingStage[];
+  color?: string | null;
+  brand?: string | null;
+  size?: string | null;
+  fabric?: string | null;
+  stainNotes?: string | null;
+  damageNotes?: string | null;
+}
+
+export interface ActorContext {
+  userId: string;
+  userName: string;
+  branchId: string;
+}
+
+/**
+ * Creates one tracked garment per piece, with its QR/barcode identity, its
+ * processing pipeline, and the opening entry of its immutable history.
+ */
+export async function createGarments(
+  tx: Tx,
+  params: {
+    orderId: string;
+    branchId: string;
+    seeds: GarmentSeed[];
+    actor: ActorContext;
+  },
+): Promise<string[]> {
+  const { seeds } = params;
+  if (seeds.length === 0) return [];
+
+  const codes = await nextGarmentCodeBlock(seeds.length, tx);
+  const createdIds: string[] = [];
+
+  for (const [index, seed] of seeds.entries()) {
+    const code = codes[index];
+    const pipeline = buildPipeline(seed.serviceStages);
+
+    const garment = await tx.garment.create({
+      data: {
+        garmentCode: code,
+        qrPayload: buildQrPayload(code),
+        barcodeValue: buildBarcodeValue(code),
+        orderId: params.orderId,
+        orderItemId: seed.orderItemId,
+        garmentTypeId: seed.garmentTypeId,
+        serviceId: seed.serviceId,
+        branchId: params.branchId,
+        status: "RECEIVED",
+        currentStage: "RECEIVING",
+        color: seed.color ?? null,
+        brand: seed.brand ?? null,
+        size: seed.size ?? null,
+        fabric: seed.fabric ?? null,
+        stainNotes: seed.stainNotes ?? null,
+        damageNotes: seed.damageNotes ?? null,
+        statusHistory: {
+          create: {
+            toStatus: "RECEIVED",
+            stage: "RECEIVING",
+            branchId: params.branchId,
+            userId: params.actor.userId,
+            userName: params.actor.userName,
+            note: "Garment received at counter",
+          },
+        },
+        tasks: {
+          create: pipeline.map((stage, sequence) => ({
+            stage,
+            sequence,
+            status: "PENDING" as TaskStatus,
+            branchId: params.branchId,
+          })),
+        },
+      },
+      select: { id: true },
+    });
+
+    createdIds.push(garment.id);
+  }
+
+  return createdIds;
+}
+
+/** Appends to the immutable garment ledger and updates the garment snapshot. */
+export async function recordGarmentStatus(
+  tx: Tx,
+  params: {
+    garmentId: string;
+    fromStatus: GarmentStatus | null;
+    toStatus: GarmentStatus;
+    stage: ProcessingStage;
+    actor: ActorContext;
+    note?: string | null;
+    scannedVia?: string | null;
+    extraData?: Prisma.GarmentUncheckedUpdateInput;
+  },
+): Promise<void> {
+  await tx.garmentStatusHistory.create({
+    data: {
+      garmentId: params.garmentId,
+      fromStatus: params.fromStatus,
+      toStatus: params.toStatus,
+      stage: params.stage,
+      branchId: params.actor.branchId,
+      userId: params.actor.userId,
+      userName: params.actor.userName,
+      note: params.note ?? null,
+      scannedVia: params.scannedVia ?? null,
+    },
+  });
+
+  await tx.garment.update({
+    where: { id: params.garmentId },
+    data: {
+      status: params.toStatus,
+      currentStage: params.stage,
+      lastScannedAt: new Date(),
+      lastScannedById: params.actor.userId,
+      ...params.extraData,
+    },
+  });
+}
+
+/** Moves a garment to a rack slot and records the move. */
+export async function moveGarmentToSlot(
+  tx: Tx,
+  params: {
+    garmentId: string;
+    fromSlotId: string | null;
+    toSlotId: string | null;
+    actor: ActorContext;
+    note?: string | null;
+  },
+): Promise<void> {
+  await tx.garment.update({
+    where: { id: params.garmentId },
+    data: { rackSlotId: params.toSlotId },
+  });
+
+  await tx.garmentLocationHistory.create({
+    data: {
+      garmentId: params.garmentId,
+      fromSlotId: params.fromSlotId,
+      toSlotId: params.toSlotId,
+      branchId: params.actor.branchId,
+      userId: params.actor.userId,
+      userName: params.actor.userName,
+      note: params.note ?? null,
+    },
+  });
+}
+
+const STATUS_RANK = new Map<GarmentStatus, number>([
+  ["RECEIVED", 0],
+  ["SORTING", 1],
+  ["SORTED", 2],
+  ["REWASH", 3],
+  ["WASHING", 4],
+  ["WASHED", 5],
+  ["DRYING", 6],
+  ["DRIED", 7],
+  ["REWORK", 8],
+  ["IRONING", 9],
+  ["IRONED", 10],
+  ["QC_PENDING", 11],
+  ["QC_FAILED", 11],
+  ["QC_PASSED", 12],
+  ["PACKING", 13],
+  ["PACKED", 14],
+  ["READY", 15],
+  ["OUT_FOR_DELIVERY", 16],
+  ["DELIVERED", 17],
+  ["RETURNED", 17],
+  ["LOST", 17],
+  ["DAMAGED", 17],
+]);
+
+/**
+ * An order is only as far along as its least-advanced garment. Recomputing
+ * from the garments keeps the order header honest without duplicating state.
+ */
+export async function recomputeOrderStatus(
+  tx: Tx,
+  orderId: string,
+  actor: ActorContext,
+): Promise<OrderStatus | null> {
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, status: true, readyAt: true, deliveredAt: true },
+  });
+  if (!order) return null;
+
+  // Manual/terminal states are never overwritten by shop-floor activity.
+  if (
+    order.status === "CANCELLED" ||
+    order.status === "REFUNDED" ||
+    order.status === "ON_HOLD"
+  ) {
+    return order.status;
+  }
+
+  const garments = await tx.garment.findMany({
+    where: { orderId },
+    select: { status: true, currentStage: true },
+  });
+
+  if (garments.length === 0) return order.status;
+
+  const trackable = garments.filter(
+    (g) => g.status !== "LOST" && g.status !== "DAMAGED",
+  );
+  const pool = trackable.length > 0 ? trackable : garments;
+
+  let laggard = pool[0];
+  let lowestRank = STATUS_RANK.get(pool[0].status) ?? 0;
+
+  for (const garment of pool) {
+    const rank = STATUS_RANK.get(garment.status) ?? 0;
+    if (rank < lowestRank) {
+      lowestRank = rank;
+      laggard = garment;
+    }
+  }
+
+  const allDelivered = pool.every((g) => g.status === "DELIVERED");
+  const someDelivered = pool.some((g) => g.status === "DELIVERED");
+  const allPacked = pool.every((g) =>
+    ["PACKED", "READY", "OUT_FOR_DELIVERY", "DELIVERED"].includes(g.status),
+  );
+  const anyOut = pool.some((g) => g.status === "OUT_FOR_DELIVERY");
+
+  let nextStatus: OrderStatus;
+  if (allDelivered) nextStatus = "DELIVERED";
+  else if (someDelivered) nextStatus = "PARTIALLY_DELIVERED";
+  else if (anyOut) nextStatus = "OUT_FOR_DELIVERY";
+  else if (allPacked) nextStatus = "READY";
+  else {
+    const stage = laggard.currentStage;
+    const taskStatus: TaskStatus = laggard.status.endsWith("ED")
+      ? "COMPLETED"
+      : "IN_PROGRESS";
+    nextStatus = orderStatusForStage(stage, taskStatus);
+  }
+
+  if (nextStatus === order.status) return order.status;
+
+  await tx.order.update({
+    where: { id: orderId },
+    data: {
+      status: nextStatus,
+      readyAt:
+        nextStatus === "READY" && !order.readyAt ? new Date() : order.readyAt,
+      deliveredAt:
+        nextStatus === "DELIVERED" && !order.deliveredAt
+          ? new Date()
+          : order.deliveredAt,
+    },
+  });
+
+  await tx.orderStatusHistory.create({
+    data: {
+      orderId,
+      fromStatus: order.status,
+      toStatus: nextStatus,
+      userId: actor.userId,
+      userName: actor.userName,
+      note: "Derived from garment progress",
+    },
+  });
+
+  return nextStatus;
+}
+
+export { STAGE_ORDER, garmentStatusFor, buildPipeline };
