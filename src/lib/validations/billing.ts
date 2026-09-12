@@ -13,6 +13,7 @@ export const paymentMethodSchema = z.enum([
   "ONLINE",
   "BANK_TRANSFER",
   "CREDIT",
+  "OTHER",
 ]);
 
 export const recordPaymentSchema = z.object({

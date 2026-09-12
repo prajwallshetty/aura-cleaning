@@ -218,9 +218,16 @@ export default async function OrderDetailPage({
             </Button>
             <Button asChild variant="outline">
               <Link href={`/orders/${order.id}/tags`}>
-                <Tag /> Print tags
+                <Tag /> Print tag
               </Link>
             </Button>
+            {canSeeMoney ? (
+              <Button asChild variant="outline">
+                <Link href={`/orders/${order.id}/receipt`}>
+                  <Printer /> Receipt
+                </Link>
+              </Button>
+            ) : null}
             {order.invoices[0] && canSeeMoney ? (
               <Button asChild variant="outline">
                 <Link href={`/billing/invoices/${order.invoices[0].id}`}>

@@ -88,7 +88,7 @@ export function garmentStatusFor(
       PASSED: "QC_PASSED",
       FAILED: "QC_FAILED",
     },
-    PACKING: { PENDING: "QC_PASSED", IN_PROGRESS: "PACKING", COMPLETED: "PACKED" },
+    PACKING: { PENDING: "IRONED", IN_PROGRESS: "PACKING", COMPLETED: "PACKED" },
     DISPATCH: { PENDING: "READY", COMPLETED: "DELIVERED" },
   };
 
@@ -112,14 +112,35 @@ export function nextStage(
 }
 
 /**
+ * The counter-facing flow. Sorting and quality control are real workstations a
+ * service can opt into, but they are not part of the standard route a walk-in
+ * order takes, so the order screens describe progress in these seven steps.
+ */
+export const POS_FLOW = [
+  "Received",
+  "Washing",
+  "Drying",
+  "Ironing",
+  "Packing",
+  "Ready",
+  "Delivered",
+] as const;
+
+/** Stages a service gets when it does not name its own. */
+export const DEFAULT_SERVICE_STAGES: ProcessingStage[] = [
+  "WASHING",
+  "DRYING",
+  "IRONING",
+  "PACKING",
+];
+
+/**
  * Builds the stage pipeline a garment must travel, honouring the stages
  * configured on its service and always ending at dispatch.
  */
 export function buildPipeline(serviceStages: ProcessingStage[]): ProcessingStage[] {
   const configured = new Set<ProcessingStage>(
-    serviceStages.length > 0
-      ? serviceStages
-      : ["SORTING", "WASHING", "DRYING", "IRONING", "QUALITY_CHECK", "PACKING"],
+    serviceStages.length > 0 ? serviceStages : DEFAULT_SERVICE_STAGES,
   );
   configured.add("PACKING");
   return STAGE_ORDER.filter(

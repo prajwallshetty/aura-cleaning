@@ -137,6 +137,7 @@ enum PaymentMethod {
   ONLINE
   BANK_TRANSFER
   CREDIT
+  OTHER
 }
 
 enum PaymentProvider {
@@ -381,13 +382,13 @@ enum ExpenseStatus {
 // ============================================================================
 
 model Branch {
-  id        String     @id @default(cuid())
-  code      String     @unique
-  name      String
-  type      BranchType @default(BRANCH)
-  parentId  String?
-  parent    Branch?    @relation("BranchHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children  Branch[]   @relation("BranchHierarchy")
+  id       String     @id @default(cuid())
+  code     String     @unique
+  name     String
+  type     BranchType @default(BRANCH)
+  parentId String?
+  parent   Branch?    @relation("BranchHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Branch[]   @relation("BranchHierarchy")
 
   addressLine String?
   city        String?
@@ -428,6 +429,8 @@ model Branch {
   auditLogs             AuditLog[]
   garmentHistory        GarmentStatusHistory[]
   locationHistory       GarmentLocationHistory[]
+  customers             Customer[]
+  scanEvents            ScanEvent[]
 
   @@index([parentId])
   @@index([isActive])
@@ -446,45 +449,47 @@ model User {
   branchId     String?
   branch       Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  image         String?
-  emailVerified DateTime?
-  lastLoginAt   DateTime?
-  mustChangePassword Boolean @default(false)
+  image              String?
+  emailVerified      DateTime?
+  lastLoginAt        DateTime?
+  mustChangePassword Boolean   @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  permissions     UserPermission[]
-  staffProfile    StaffProfile?
-  driver          Driver?
+  accounts     Account[]
+  sessions     Session[]
+  permissions  UserPermission[]
+  staffProfile StaffProfile?
+  driver       Driver?
 
-  createdOrders        Order[]                 @relation("OrderCreatedBy")
-  garmentScans         Garment[]               @relation("GarmentLastScannedBy")
+  createdOrders        Order[]                  @relation("OrderCreatedBy")
+  garmentScans         Garment[]                @relation("GarmentLastScannedBy")
   garmentHistory       GarmentStatusHistory[]
   locationHistory      GarmentLocationHistory[]
-  assignedTasks        ProcessingTask[]        @relation("TaskAssignee")
+  assignedTasks        ProcessingTask[]         @relation("TaskAssignee")
   taskHistory          ProcessingHistory[]
-  batches              ProcessingBatch[]       @relation("BatchOperator")
-  paymentsReceived     Payment[]               @relation("PaymentReceivedBy")
-  refundsProcessed     Refund[]                @relation("RefundProcessedBy")
+  batches              ProcessingBatch[]        @relation("BatchOperator")
+  paymentsReceived     Payment[]                @relation("PaymentReceivedBy")
+  refundsProcessed     Refund[]                 @relation("RefundProcessedBy")
   inventoryTxns        InventoryTransaction[]
-  purchaseOrdersMade   PurchaseOrder[]         @relation("PurchaseOrderCreatedBy")
-  goodsReceived        GoodsReceipt[]          @relation("GoodsReceivedBy")
-  supplierPayments     SupplierPayment[]       @relation("SupplierPaymentBy")
-  complaintsAssigned   Complaint[]             @relation("ComplaintAssignee")
-  complaintsCreated    Complaint[]             @relation("ComplaintCreatedBy")
-  complaintsResolved   Complaint[]             @relation("ComplaintResolvedBy")
+  purchaseOrdersMade   PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
+  goodsReceived        GoodsReceipt[]           @relation("GoodsReceivedBy")
+  supplierPayments     SupplierPayment[]        @relation("SupplierPaymentBy")
+  complaintsAssigned   Complaint[]              @relation("ComplaintAssignee")
+  complaintsCreated    Complaint[]              @relation("ComplaintCreatedBy")
+  complaintsResolved   Complaint[]              @relation("ComplaintResolvedBy")
   complaintAttachments ComplaintAttachment[]
   garmentPhotos        GarmentPhoto[]
   attendances          Attendance[]
-  leaves               Leave[]                 @relation("LeaveUser")
-  leavesApproved       Leave[]                 @relation("LeaveApprover")
-  expensesCreated      Expense[]               @relation("ExpenseCreatedBy")
-  expensesApproved     Expense[]               @relation("ExpenseApprovedBy")
+  leaves               Leave[]                  @relation("LeaveUser")
+  leavesApproved       Leave[]                  @relation("LeaveApprover")
+  expensesCreated      Expense[]                @relation("ExpenseCreatedBy")
+  expensesApproved     Expense[]                @relation("ExpenseApprovedBy")
   auditLogs            AuditLog[]
-  invoicesIssued       Invoice[]               @relation("InvoiceIssuedBy")
+  invoicesIssued       Invoice[]                @relation("InvoiceIssuedBy")
+  customersCreated     Customer[]               @relation("CustomerCreatedBy")
+  scanEvents           ScanEvent[]              @relation("ScanEventScannedBy")
 
   @@index([branchId])
   @@index([role])
@@ -700,13 +705,13 @@ model Leave {
 }
 
 model Driver {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String  @id @default(cuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   licenseNumber String?
   vehicleNumber String?
   vehicleType   String?
-  isAvailable   Boolean  @default(true)
+  isAvailable   Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -722,36 +727,36 @@ model Driver {
 // ============================================================================
 
 model Service {
-  id              String      @id @default(cuid())
-  code            String      @unique
+  id              String            @id @default(cuid())
+  code            String            @unique
   name            String
   description     String?
-  pricingMode     PricingMode @default(PER_PIECE)
-  basePrice       Decimal     @db.Decimal(12, 2)
-  turnaroundHours Int         @default(48)
+  pricingMode     PricingMode       @default(PER_PIECE)
+  basePrice       Decimal           @db.Decimal(12, 2)
+  turnaroundHours Int               @default(48)
   stages          ProcessingStage[]
-  isActive        Boolean     @default(true)
+  isActive        Boolean           @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  rates       ServiceRate[]
-  orderItems  OrderItem[]
-  garments    Garment[]
-  rateCards   B2BRateCard[]
+  rates      ServiceRate[]
+  orderItems OrderItem[]
+  garments   Garment[]
+  rateCards  B2BRateCard[]
 
   @@index([isActive])
   @@map("services")
 }
 
 model GarmentType {
-  id           String   @id @default(cuid())
-  code         String   @unique
-  name         String
-  category     String   @default("GENERAL")
+  id              String   @id @default(cuid())
+  code            String   @unique
+  name            String
+  category        String   @default("GENERAL")
   defaultWeightKg Decimal? @db.Decimal(8, 3)
-  icon         String?
-  isActive     Boolean  @default(true)
+  icon            String?
+  isActive        Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -786,23 +791,28 @@ model ServiceRate {
 // ============================================================================
 
 model Order {
-  id          String        @id @default(cuid())
-  orderNumber String        @unique
-  branchId    String
-  branch      Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  type        OrderType     @default(WALK_IN)
-  priority    OrderPriority @default(NORMAL)
-  status      OrderStatus   @default(RECEIVED)
+  id            String        @id @default(cuid())
+  orderNumber   String        @unique
+  branchId      String
+  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  type          OrderType     @default(WALK_IN)
+  priority      OrderPriority @default(NORMAL)
+  status        OrderStatus   @default(RECEIVED)
   paymentStatus PaymentStatus @default(UNPAID)
 
   // Customer details are captured on the order itself (billing / pickup / delivery).
-  customerName    String
-  customerPhone   String
-  customerEmail   String?
-  addressLine     String?
-  city            String?
-  pincode         String?
-  landmark        String?
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  addressLine   String?
+  city          String?
+  pincode       String?
+  landmark      String?
+
+  // The order keeps its own copy of the details above so an invoice never
+  // changes when a customer record is later edited; the link is for history.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   b2bAccountId String?
   b2bAccount   B2BAccount? @relation(fields: [b2bAccountId], references: [id], onDelete: SetNull)
@@ -814,18 +824,18 @@ model Order {
   cancelledAt        DateTime?
   cancellationReason String?
 
-  subtotal       Decimal @default(0) @db.Decimal(12, 2)
-  discountAmount Decimal @default(0) @db.Decimal(12, 2)
-  discountReason String?
-  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
-  gstRate        Decimal @default(18) @db.Decimal(5, 2)
-  gstAmount      Decimal @default(0) @db.Decimal(12, 2)
-  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
-  paidAmount     Decimal @default(0) @db.Decimal(12, 2)
+  subtotal          Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount    Decimal @default(0) @db.Decimal(12, 2)
+  discountReason    String?
+  taxableAmount     Decimal @default(0) @db.Decimal(12, 2)
+  gstRate           Decimal @default(18) @db.Decimal(5, 2)
+  gstAmount         Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount       Decimal @default(0) @db.Decimal(12, 2)
+  paidAmount        Decimal @default(0) @db.Decimal(12, 2)
   outstandingAmount Decimal @default(0) @db.Decimal(12, 2)
-  refundedAmount Decimal @default(0) @db.Decimal(12, 2)
+  refundedAmount    Decimal @default(0) @db.Decimal(12, 2)
 
-  totalPieces Int     @default(0)
+  totalPieces   Int     @default(0)
   totalWeightKg Decimal @default(0) @db.Decimal(10, 3)
 
   specialInstructions String?
@@ -834,6 +844,9 @@ model Order {
 
   rackSlotId String?
   rackSlot   RackSlot? @relation(fields: [rackSlotId], references: [id], onDelete: SetNull)
+
+  tagPrintCount    Int       @default(0)
+  tagLastPrintedAt DateTime?
 
   createdById String?
   createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -852,9 +865,11 @@ model Order {
   complaints    Complaint[]
   notifications Notification[]
   invoiceLines  InvoiceLine[]
+  scanEvents    ScanEvent[]
 
   @@index([branchId, status])
   @@index([customerPhone])
+  @@index([customerId])
   @@index([placedAt])
   @@index([expectedDeliveryAt])
   @@index([paymentStatus])
@@ -890,15 +905,15 @@ model OrderItem {
 }
 
 model OrderStatusHistory {
-  id         String      @id @default(cuid())
+  id         String       @id @default(cuid())
   orderId    String
-  order      Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   fromStatus OrderStatus?
   toStatus   OrderStatus
   userId     String?
   userName   String?
   note       String?
-  createdAt  DateTime    @default(now())
+  createdAt  DateTime     @default(now())
 
   @@index([orderId, createdAt])
   @@map("order_status_history")
@@ -909,19 +924,19 @@ model OrderStatusHistory {
 // ============================================================================
 
 model Garment {
-  id          String        @id @default(cuid())
-  garmentCode String        @unique
-  qrPayload   String        @unique
-  barcodeValue String       @unique
+  id           String @id @default(cuid())
+  garmentCode  String @unique
+  qrPayload    String @unique
+  barcodeValue String @unique
 
-  orderId     String
-  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItemId String?
-  orderItem   OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  orderId       String
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId   String?
+  orderItem     OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   garmentTypeId String
-  garmentType GarmentType @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
-  serviceId   String
-  service     Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  garmentType   GarmentType @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
+  serviceId     String
+  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -929,14 +944,14 @@ model Garment {
   status       GarmentStatus   @default(RECEIVED)
   currentStage ProcessingStage @default(RECEIVING)
 
-  color      String?
-  brand      String?
-  size       String?
-  fabric     String?
-  stainNotes String?
+  color       String?
+  brand       String?
+  size        String?
+  fabric      String?
+  stainNotes  String?
   damageNotes String?
-  rewashCount Int    @default(0)
-  reworkCount Int    @default(0)
+  rewashCount Int     @default(0)
+  reworkCount Int     @default(0)
 
   rackSlotId String?
   rackSlot   RackSlot? @relation(fields: [rackSlotId], references: [id], onDelete: SetNull)
@@ -966,20 +981,20 @@ model Garment {
 
 /// Immutable ledger — rows are only ever inserted, never updated or deleted.
 model GarmentStatusHistory {
-  id         String           @id @default(cuid())
+  id         String          @id @default(cuid())
   garmentId  String
-  garment    Garment          @relation(fields: [garmentId], references: [id], onDelete: Cascade)
+  garment    Garment         @relation(fields: [garmentId], references: [id], onDelete: Cascade)
   fromStatus GarmentStatus?
   toStatus   GarmentStatus
   stage      ProcessingStage
   branchId   String?
-  branch     Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  branch     Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
   userId     String?
-  user       User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   userName   String?
   note       String?
   scannedVia String?
-  createdAt  DateTime         @default(now())
+  createdAt  DateTime        @default(now())
 
   @@index([garmentId, createdAt])
   @@index([createdAt])
@@ -1009,14 +1024,14 @@ model GarmentPhoto {
 // ============================================================================
 
 model ProcessingBatch {
-  id         String          @id @default(cuid())
-  batchCode  String          @unique
-  stage      ProcessingStage
-  branchId   String
-  branch     Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  status     TaskStatus      @default(PENDING)
-  operatorId String?
-  operator   User?           @relation("BatchOperator", fields: [operatorId], references: [id], onDelete: SetNull)
+  id          String          @id @default(cuid())
+  batchCode   String          @unique
+  stage       ProcessingStage
+  branchId    String
+  branch      Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  status      TaskStatus      @default(PENDING)
+  operatorId  String?
+  operator    User?           @relation("BatchOperator", fields: [operatorId], references: [id], onDelete: SetNull)
   startedAt   DateTime?
   completedAt DateTime?
   notes       String?
@@ -1045,12 +1060,12 @@ model ProcessingTask {
   batchId String?
   batch   ProcessingBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
-  sequence    Int       @default(0)
-  startedAt   DateTime?
-  completedAt DateTime?
+  sequence        Int       @default(0)
+  startedAt       DateTime?
+  completedAt     DateTime?
   durationSeconds Int?
-  failureReason String?
-  notes       String?
+  failureReason   String?
+  notes           String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1065,16 +1080,16 @@ model ProcessingTask {
 }
 
 model ProcessingHistory {
-  id         String     @id @default(cuid())
+  id         String         @id @default(cuid())
   taskId     String
   task       ProcessingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
   fromStatus TaskStatus?
   toStatus   TaskStatus
   userId     String?
-  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   userName   String?
   note       String?
-  createdAt  DateTime   @default(now())
+  createdAt  DateTime       @default(now())
 
   @@index([taskId, createdAt])
   @@map("processing_history")
@@ -1115,8 +1130,8 @@ model RackSlot {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  garments  Garment[]
-  orders    Order[]
+  garments    Garment[]
+  orders      Order[]
   historyFrom GarmentLocationHistory[] @relation("LocationFromSlot")
   historyTo   GarmentLocationHistory[] @relation("LocationToSlot")
 
@@ -1160,6 +1175,11 @@ model Invoice {
 
   orderId String?
   order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  // The order keeps its own copy of the details above so an invoice never
+  // changes when a customer record is later edited; the link is for history.
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   b2bAccountId String?
   b2bAccount   B2BAccount? @relation(fields: [b2bAccountId], references: [id], onDelete: SetNull)
@@ -1222,14 +1242,14 @@ model InvoiceLine {
 }
 
 model Payment {
-  id            String          @id @default(cuid())
-  paymentNumber String          @unique
+  id            String   @id @default(cuid())
+  paymentNumber String   @unique
   branchId      String
-  branch        Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
   orderId       String?
-  order         Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   invoiceId     String?
-  invoice       Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice       Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
   amount   Decimal         @db.Decimal(12, 2)
   method   PaymentMethod   @default(CASH)
@@ -1243,9 +1263,9 @@ model Payment {
   isAdvance         Boolean @default(false)
   notes             String?
 
-  paidAt         DateTime @default(now())
-  receivedById   String?
-  receivedBy     User?    @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  paidAt       DateTime @default(now())
+  receivedById String?
+  receivedBy   User?    @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1260,22 +1280,22 @@ model Payment {
 }
 
 model Refund {
-  id           String       @id @default(cuid())
-  refundNumber String       @unique
+  id           String   @id @default(cuid())
+  refundNumber String   @unique
   orderId      String?
-  order        Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   invoiceId    String?
-  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice      Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   paymentId    String?
-  payment      Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  payment      Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
-  amount    Decimal       @db.Decimal(12, 2)
-  method    PaymentMethod @default(CASH)
-  status    RefundStatus  @default(REQUESTED)
-  reason    String
-  notes     String?
+  amount        Decimal       @db.Decimal(12, 2)
+  method        PaymentMethod @default(CASH)
+  status        RefundStatus  @default(REQUESTED)
+  reason        String
+  notes         String?
   processedById String?
-  processedBy   User?    @relation("RefundProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
+  processedBy   User?         @relation("RefundProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
   processedAt   DateTime?
 
   createdAt DateTime @default(now())
@@ -1336,10 +1356,10 @@ model Delivery {
   driverId String?
   driver   Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
 
-  scheduledAt   DateTime
-  assignedAt    DateTime?
-  dispatchedAt  DateTime?
-  deliveredAt   DateTime?
+  scheduledAt    DateTime
+  assignedAt     DateTime?
+  dispatchedAt   DateTime?
+  deliveredAt    DateTime?
   rescheduledFor DateTime?
 
   contactName  String
@@ -1347,8 +1367,8 @@ model Delivery {
   addressLine  String
   landmark     String?
 
-  amountToCollect Decimal        @default(0) @db.Decimal(12, 2)
-  amountCollected Decimal        @default(0) @db.Decimal(12, 2)
+  amountToCollect  Decimal        @default(0) @db.Decimal(12, 2)
+  amountCollected  Decimal        @default(0) @db.Decimal(12, 2)
   collectionMethod PaymentMethod?
 
   isPartial      Boolean @default(false)
@@ -1415,15 +1435,15 @@ model InventoryStock {
 }
 
 model InventoryTransaction {
-  id       String           @id @default(cuid())
-  itemId   String
-  item     InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  branchId String
-  branch   Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  type     InventoryTxnType
-  quantity Decimal          @db.Decimal(12, 3)
-  balanceAfter Decimal      @default(0) @db.Decimal(12, 3)
-  unitCost Decimal?         @db.Decimal(12, 2)
+  id           String           @id @default(cuid())
+  itemId       String
+  item         InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  branchId     String
+  branch       Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  type         InventoryTxnType
+  quantity     Decimal          @db.Decimal(12, 3)
+  balanceAfter Decimal          @default(0) @db.Decimal(12, 3)
+  unitCost     Decimal?         @db.Decimal(12, 2)
 
   counterpartBranchId String?
   reference           String?
@@ -1503,16 +1523,16 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderItem {
-  id       String        @id @default(cuid())
-  poId     String
-  po       PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  itemId   String
-  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  quantity Decimal       @db.Decimal(12, 3)
-  receivedQuantity Decimal @default(0) @db.Decimal(12, 3)
-  unitPrice Decimal      @db.Decimal(12, 2)
-  taxRate   Decimal      @default(0) @db.Decimal(5, 2)
-  lineTotal Decimal      @db.Decimal(12, 2)
+  id               String        @id @default(cuid())
+  poId             String
+  po               PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  itemId           String
+  item             InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  quantity         Decimal       @db.Decimal(12, 3)
+  receivedQuantity Decimal       @default(0) @db.Decimal(12, 3)
+  unitPrice        Decimal       @db.Decimal(12, 2)
+  taxRate          Decimal       @default(0) @db.Decimal(5, 2)
+  lineTotal        Decimal       @db.Decimal(12, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1522,16 +1542,16 @@ model PurchaseOrderItem {
 }
 
 model GoodsReceipt {
-  id        String        @id @default(cuid())
-  grnNumber String        @unique
-  poId      String
-  po        PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  branchId  String
-  branch    Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  receivedAt DateTime     @default(now())
+  id           String        @id @default(cuid())
+  grnNumber    String        @unique
+  poId         String
+  po           PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  branchId     String
+  branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  receivedAt   DateTime      @default(now())
   receivedById String?
-  receivedBy   User?      @relation("GoodsReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
-  notes     String?
+  receivedBy   User?         @relation("GoodsReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  notes        String?
 
   createdAt DateTime @default(now())
 
@@ -1646,20 +1666,20 @@ model PurchaseReturnItem {
 // ============================================================================
 
 model B2BAccount {
-  id            String         @id @default(cuid())
-  code          String         @unique
-  businessName  String
-  type          B2BAccountType @default(CORPORATE)
-  contactPerson String?
-  phone         String
-  email         String?
-  billingAddress String?
-  gstNumber     String?
-  creditLimit   Decimal        @default(0) @db.Decimal(12, 2)
-  creditDays    Int            @default(30)
-  paymentTerms  String?
-  outstandingBalance Decimal   @default(0) @db.Decimal(12, 2)
-  isActive      Boolean        @default(true)
+  id                 String         @id @default(cuid())
+  code               String         @unique
+  businessName       String
+  type               B2BAccountType @default(CORPORATE)
+  contactPerson      String?
+  phone              String
+  email              String?
+  billingAddress     String?
+  gstNumber          String?
+  creditLimit        Decimal        @default(0) @db.Decimal(12, 2)
+  creditDays         Int            @default(30)
+  paymentTerms       String?
+  outstandingBalance Decimal        @default(0) @db.Decimal(12, 2)
+  isActive           Boolean        @default(true)
 
   branchId String?
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -1679,16 +1699,16 @@ model B2BAccount {
 }
 
 model B2BContract {
-  id             String         @id @default(cuid())
-  contractNumber String         @unique
-  accountId      String
-  account        B2BAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  status         ContractStatus @default(ACTIVE)
-  billingCycle   BillingCycle   @default(MONTHLY)
-  startDate      DateTime
-  endDate        DateTime?
-  minimumMonthlyValue Decimal   @default(0) @db.Decimal(12, 2)
-  terms          String?
+  id                  String         @id @default(cuid())
+  contractNumber      String         @unique
+  accountId           String
+  account             B2BAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status              ContractStatus @default(ACTIVE)
+  billingCycle        BillingCycle   @default(MONTHLY)
+  startDate           DateTime
+  endDate             DateTime?
+  minimumMonthlyValue Decimal        @default(0) @db.Decimal(12, 2)
+  terms               String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1850,10 +1870,10 @@ model NotificationTemplate {
 }
 
 model Notification {
-  id       String              @id @default(cuid())
-  event    NotificationEvent
-  channel  NotificationChannel
-  status   NotificationStatus  @default(PENDING)
+  id      String              @id @default(cuid())
+  event   NotificationEvent
+  channel NotificationChannel
+  status  NotificationStatus  @default(PENDING)
 
   templateId String?
   template   NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -1931,4 +1951,87 @@ model Expense {
   @@index([branchId, expenseDate])
   @@index([category])
   @@map("expenses")
+}
+
+/// Counter-facing customer record. Orders keep their own copy of the contact
+/// details so historical invoices never change; this row is the searchable
+/// directory and the place lifetime figures are rolled up.
+model Customer {
+  id       String @id @default(cuid())
+  code     String @unique
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  name  String
+  phone String
+  email String?
+
+  addressLine String?
+  city        String?
+  pincode     String?
+  landmark    String?
+
+  notes    String?
+  isActive Boolean @default(true)
+
+  // Rolled up from orders and payments whenever either changes.
+  orderCount        Int       @default(0)
+  totalSpent        Decimal   @default(0) @db.Decimal(14, 2)
+  outstandingAmount Decimal   @default(0) @db.Decimal(14, 2)
+  lastOrderAt       DateTime?
+
+  createdById String?
+  createdBy   User?   @relation("CustomerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders   Order[]
+  invoices Invoice[]
+
+  @@unique([branchId, phone])
+  @@index([branchId, name])
+  @@index([phone])
+  @@map("customers")
+}
+
+/// Append-only log of every tag scan, so the counter can see what was scanned,
+/// by whom, and what happened next.
+model ScanEvent {
+  id       String @id @default(cuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  rawCode     String
+  resolvedAs  ScanTargetKind @default(UNKNOWN)
+  orderId     String?
+  order       Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  garmentCode String?
+
+  succeeded Boolean    @default(true)
+  message   String?
+  action    String?
+  source    ScanSource @default(KEYBOARD)
+
+  scannedById String?
+  scannedBy   User?   @relation("ScanEventScannedBy", fields: [scannedById], references: [id], onDelete: SetNull)
+
+  scannedAt DateTime @default(now())
+
+  @@index([branchId, scannedAt])
+  @@index([orderId])
+  @@map("scan_events")
+}
+
+enum ScanTargetKind {
+  ORDER
+  GARMENT
+  SLOT
+  UNKNOWN
+}
+
+enum ScanSource {
+  KEYBOARD
+  CAMERA
+  HARDWARE
 }

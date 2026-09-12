@@ -706,6 +706,7 @@ export function OrderForm({
                     <SelectItem value="CARD">Card</SelectItem>
                     <SelectItem value="ONLINE">Online</SelectItem>
                     <SelectItem value="BANK_TRANSFER">Bank transfer</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </FormField>

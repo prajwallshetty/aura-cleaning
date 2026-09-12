@@ -103,9 +103,11 @@ async function clearTransactionalData() {
     prisma.payment.deleteMany(),
     prisma.invoiceLine.deleteMany(),
     prisma.invoice.deleteMany(),
+    prisma.scanEvent.deleteMany(),
     prisma.orderStatusHistory.deleteMany(),
     prisma.orderItem.deleteMany(),
     prisma.order.deleteMany(),
+    prisma.customer.deleteMany(),
     prisma.goodsReceiptItem.deleteMany(),
     prisma.goodsReceipt.deleteMany(),
     prisma.supplierPayment.deleteMany(),
@@ -479,7 +481,7 @@ async function seedCatalogue() {
       pricingMode: "PER_KG" as const,
       basePrice: 90,
       turnaroundHours: 48,
-      stages: ["SORTING", "WASHING", "DRYING", "PACKING"] as ProcessingStage[],
+      stages: ["WASHING", "DRYING", "PACKING"] as ProcessingStage[],
       description: "Everyday laundry charged by weight",
     },
     {
@@ -488,14 +490,7 @@ async function seedCatalogue() {
       pricingMode: "PER_PIECE" as const,
       basePrice: 35,
       turnaroundHours: 48,
-      stages: [
-        "SORTING",
-        "WASHING",
-        "DRYING",
-        "IRONING",
-        "QUALITY_CHECK",
-        "PACKING",
-      ] as ProcessingStage[],
+      stages: ["WASHING", "DRYING", "IRONING", "PACKING"] as ProcessingStage[],
       description: "Washed, dried and pressed, charged per garment",
     },
     {
@@ -504,13 +499,7 @@ async function seedCatalogue() {
       pricingMode: "PER_PIECE" as const,
       basePrice: 120,
       turnaroundHours: 72,
-      stages: [
-        "SORTING",
-        "WASHING",
-        "IRONING",
-        "QUALITY_CHECK",
-        "PACKING",
-      ] as ProcessingStage[],
+      stages: ["WASHING", "DRYING", "IRONING", "PACKING"] as ProcessingStage[],
       description: "Solvent cleaning for delicate and formal wear",
     },
     {
@@ -519,7 +508,7 @@ async function seedCatalogue() {
       pricingMode: "PER_PIECE" as const,
       basePrice: 15,
       turnaroundHours: 24,
-      stages: ["SORTING", "IRONING", "PACKING"] as ProcessingStage[],
+      stages: ["IRONING", "PACKING"] as ProcessingStage[],
       description: "Pressing only, no wash",
     },
     {
@@ -528,8 +517,8 @@ async function seedCatalogue() {
       pricingMode: "PER_PIECE" as const,
       basePrice: 220,
       turnaroundHours: 96,
+      // Premium is the one route that still runs a formal QC step.
       stages: [
-        "SORTING",
         "WASHING",
         "DRYING",
         "IRONING",
@@ -1050,6 +1039,17 @@ async function seedNotificationTemplates() {
   console.log(`  ${templates.length} notification templates`);
 }
 
+/** A customer as the order seeder needs it: enough to fill an order's snapshot. */
+interface DirectoryEntry {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  addressLine: string | null;
+  city: string | null;
+  pincode: string | null;
+}
+
 interface OrderPlan {
   /** How far the order should have progressed, as a fraction of the pipeline. */
   progress: "fresh" | "mid" | "ready" | "delivered" | "delayed";
@@ -1118,6 +1118,49 @@ async function seedOrders(context: {
   const slotOccupancy = new Map<string, number>();
   const createdOrders: { id: string; orderNumber: string; branchId: string }[] = [];
 
+  // A directory per branch, sized so roughly half the orders land on a repeat
+  // customer — which is what makes the repeat badge and lifetime totals mean
+  // something on the customer screens.
+  let customerCounter = 0;
+  const directory = new Map<string, DirectoryEntry[]>();
+
+  for (const branch of branches.filter((entry) => entry.code !== "HO")) {
+    const entries: DirectoryEntry[] = [];
+    for (let index = 0; index < 14; index += 1) {
+      customerCounter += 1;
+      const name = fullName();
+      const area = pick(AREAS);
+      const record = await prisma.customer.create({
+        data: {
+          code: `CUS${10000 + customerCounter}`,
+          branchId: branch.id,
+          name,
+          phone: phone().replace(/\D/g, "").slice(-10),
+          email:
+            random() < 0.55
+              ? `${name.split(" ")[0].toLowerCase()}${randomInt(10, 99)}@example.com`
+              : null,
+          addressLine: `${randomInt(1, 400)}, ${randomInt(1, 12)}th Cross, ${area}`,
+          city: "Bengaluru",
+          pincode: `5600${randomInt(10, 99)}`,
+        },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          addressLine: true,
+          city: true,
+          pincode: true,
+        },
+      });
+      entries.push(record);
+    }
+    directory.set(branch.id, entries);
+  }
+
+  const b2bCustomers = new Map<string, DirectoryEntry>();
+
   for (const plan of plans) {
     orderCounter += 1;
 
@@ -1183,9 +1226,38 @@ async function seedOrders(context: {
           : 0;
     const outstanding = round2(totalAmount - paid);
 
-    const customerName = account ? account.businessName : fullName();
-    const customerPhone = account ? account.phone : phone();
-    const area = pick(AREAS);
+    let customer: DirectoryEntry;
+    if (account) {
+      const cached = b2bCustomers.get(`${branch.id}:${account.id}`);
+      customer =
+        cached ??
+        (await prisma.customer.create({
+          data: {
+            code: `CUS${10000 + (customerCounter += 1)}`,
+            branchId: branch.id,
+            name: account.businessName,
+            phone: account.phone.replace(/\D/g, "").slice(-10),
+            addressLine: `${randomInt(1, 400)}, ${randomInt(1, 12)}th Cross, ${pick(AREAS)}`,
+            city: "Bengaluru",
+            pincode: `5600${randomInt(10, 99)}`,
+          },
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            email: true,
+            addressLine: true,
+            city: true,
+            pincode: true,
+          },
+        }));
+      b2bCustomers.set(`${branch.id}:${account.id}`, customer);
+    } else {
+      customer = pick(directory.get(branch.id) ?? []);
+    }
+
+    const customerName = customer.name;
+    const customerPhone = customer.phone;
 
     const order = await prisma.order.create({
       data: {
@@ -1196,15 +1268,13 @@ async function seedOrders(context: {
         status: "RECEIVED",
         paymentStatus:
           paid <= 0 ? "UNPAID" : paid >= totalAmount ? "PAID" : "PARTIALLY_PAID",
+        customerId: customer.id,
         customerName,
         customerPhone,
-        customerEmail:
-          random() < 0.5
-            ? `${customerName.split(" ")[0].toLowerCase()}${randomInt(10, 99)}@example.com`
-            : null,
-        addressLine: `${randomInt(1, 400)}, ${randomInt(1, 12)}th Cross, ${area}`,
-        city: "Bengaluru",
-        pincode: `5600${randomInt(10, 99)}`,
+        customerEmail: customer.email,
+        addressLine: customer.addressLine,
+        city: customer.city,
+        pincode: customer.pincode,
         b2bAccountId: account?.id ?? null,
         placedAt,
         expectedDeliveryAt,
@@ -1629,6 +1699,26 @@ async function seedOrders(context: {
     }
   }
 
+  // Roll the lifetime figures up the same way the application does, in one
+  // pass rather than per order.
+  await prisma.$executeRaw`
+    UPDATE "customers" c
+    SET "orderCount" = t."orders",
+        "totalSpent" = t."paid",
+        "outstandingAmount" = t."due",
+        "lastOrderAt" = t."last"
+    FROM (
+      SELECT o."customerId" AS id,
+             count(*) FILTER (WHERE o."status" <> 'CANCELLED') AS "orders",
+             coalesce(sum(o."paidAmount") FILTER (WHERE o."status" <> 'CANCELLED'), 0) AS "paid",
+             coalesce(sum(o."outstandingAmount") FILTER (WHERE o."status" <> 'CANCELLED'), 0) AS "due",
+             max(o."placedAt") AS "last"
+      FROM "orders" o
+      WHERE o."customerId" IS NOT NULL
+      GROUP BY o."customerId"
+    ) t
+    WHERE c."id" = t."id"`;
+
   // Keep the sequences ahead of everything the seed created.
   const sequences: [string, number][] = [
     ["order", orderCounter],
@@ -1637,6 +1727,7 @@ async function seedOrders(context: {
     ["payment", paymentCounter],
     ["delivery", deliveryCounter],
     ["pickup", pickupCounter],
+    ["customer", customerCounter],
   ];
 
   await prisma.$transaction(
@@ -1649,7 +1740,9 @@ async function seedOrders(context: {
     ),
   );
 
-  console.log(`  ${orderCounter} orders, ${garmentCounter} tracked garments`);
+  console.log(
+    `  ${orderCounter} orders, ${garmentCounter} tracked garments, ${customerCounter} customers`,
+  );
   return createdOrders;
 }
 

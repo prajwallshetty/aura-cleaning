@@ -203,4 +203,76 @@
   body {
     background: #fff;
   }
+
+  /*
+   * Thermal printing. The counter sets `data-print-mode="thermal"` on <body>
+   * just before window.print(), which blanks the whole application and leaves
+   * only the sheet — a roll printer has no page furniture to spare.
+   */
+  body[data-print-mode="thermal"] * {
+    visibility: hidden !important;
+  }
+  body[data-print-mode="thermal"] .thermal-print-root,
+  body[data-print-mode="thermal"] .thermal-print-root * {
+    visibility: visible !important;
+  }
+  body[data-print-mode="thermal"] .thermal-print-root {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  body[data-print-mode="thermal"] .thermal-tag {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  body[data-print-mode="thermal"] .thermal-tag + .thermal-tag {
+    break-before: page;
+    page-break-before: always;
+  }
+}
+
+/*
+ * Thermal roll output is one colour on one colour. Everything below is sized in
+ * millimetres so the on-screen preview is the same size as the paper, and every
+ * colour is forced to pure black so a receipt printer's dithering has nothing
+ * to guess at.
+ */
+.thermal-sheet {
+  background: #fff;
+  color: #000;
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.thermal-sheet * {
+  color: #000 !important;
+  border-color: #000 !important;
+}
+
+/* Parked off-canvas until the print stylesheet brings it back on-page. */
+.thermal-print-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+}
+
+.thermal-tag {
+  padding: 2mm 2.5mm 3mm;
+  line-height: 1.25;
+}
+
+.thermal-rule {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 1.5mm 0;
+}
+
+.thermal-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
 }

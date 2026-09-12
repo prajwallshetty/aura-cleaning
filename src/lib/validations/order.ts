@@ -37,6 +37,9 @@ export const createOrderSchema = z
     pincode: optionalText(12),
     landmark: optionalText(120),
 
+    /** Set when the counter picked an existing customer from the directory. */
+    customerId: optionalCuid,
+
     b2bAccountId: optionalCuid,
 
     expectedDeliveryAt: dateSchema,
@@ -49,7 +52,7 @@ export const createOrderSchema = z
 
     advanceAmount: moneySchema.default(0),
     advanceMethod: z
-      .enum(["CASH", "UPI", "CARD", "ONLINE", "BANK_TRANSFER", "CREDIT"])
+      .enum(["CASH", "UPI", "CARD", "ONLINE", "BANK_TRANSFER", "CREDIT", "OTHER"])
       .default("CASH"),
 
     specialInstructions: optionalText(1000),

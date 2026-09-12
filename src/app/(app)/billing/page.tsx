@@ -471,6 +471,7 @@ export default async function BillingPage({
                   "ONLINE",
                   "BANK_TRANSFER",
                   "CREDIT",
+                  "OTHER",
                 ] as const),
               },
               ...(branches.length > 1

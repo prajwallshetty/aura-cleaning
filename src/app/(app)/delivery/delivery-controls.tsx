@@ -245,6 +245,7 @@ export function CompleteDeliveryDialog({
                         <SelectItem value="UPI">UPI</SelectItem>
                         <SelectItem value="CARD">Card</SelectItem>
                         <SelectItem value="ONLINE">Online</SelectItem>
+                        <SelectItem value="OTHER">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </FormField>

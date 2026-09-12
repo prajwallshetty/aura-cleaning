@@ -5,6 +5,7 @@ import { computeTotals, derivePaymentStatus, num, round2, round3, splitGst } fro
 import { nextInvoiceNumber, nextOrderNumber, nextPaymentNumber, nextPickupNumber } from "@/lib/sequence";
 import { resolvePrice } from "@/lib/services/pricing";
 import { createGarments, type ActorContext, type GarmentSeed } from "@/lib/services/garments";
+import { recalcCustomerRollup, upsertCustomer } from "@/lib/services/customers";
 import { notify } from "@/lib/services/notifications";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
@@ -19,6 +20,7 @@ export interface CreatedOrder {
   orderNumber: string;
   totalAmount: number;
   garmentCount: number;
+  customerId: string;
 }
 
 /**
@@ -116,6 +118,22 @@ export async function createOrder(
       const orderNumber = await nextOrderNumber(tx);
       const outstanding = round2(totals.totalAmount - input.advanceAmount);
 
+      // Every order belongs to a directory entry; walk-ins create one on the
+      // spot so the counter can find them again by phone next time.
+      const customer = await upsertCustomer(tx, {
+        branchId: input.branchId,
+        createdById: actor.userId,
+        details: {
+          name: input.customerName,
+          phone: input.customerPhone,
+          email: input.customerEmail,
+          addressLine: input.addressLine,
+          city: input.city,
+          pincode: input.pincode,
+          landmark: input.landmark,
+        },
+      });
+
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -131,6 +149,7 @@ export async function createOrder(
           city: input.city ?? null,
           pincode: input.pincode ?? null,
           landmark: input.landmark ?? null,
+          customerId: customer.id,
           b2bAccountId: input.b2bAccountId ?? null,
           expectedDeliveryAt: input.expectedDeliveryAt,
           subtotal: totals.subtotal,
@@ -289,11 +308,14 @@ export async function createOrder(
         });
       }
 
+      await recalcCustomerRollup(tx, customer.id);
+
       return {
         id: order.id,
         orderNumber: order.orderNumber,
         totalAmount: totals.totalAmount,
         garmentCount: seeds.length,
+        customerId: customer.id,
       };
     },
     { timeout: 30_000 },
@@ -347,7 +369,12 @@ export async function recalcOrderPayments(tx: Tx, orderId: string): Promise<void
   const [order, paymentAgg, refundAgg] = await Promise.all([
     tx.order.findUnique({
       where: { id: orderId },
-      select: { totalAmount: true, b2bAccountId: true, outstandingAmount: true },
+      select: {
+        totalAmount: true,
+        b2bAccountId: true,
+        outstandingAmount: true,
+        customerId: true,
+      },
     }),
     tx.payment.aggregate({
       where: { orderId, state: "CAPTURED" },
@@ -402,6 +429,10 @@ export async function recalcOrderPayments(tx: Tx, orderId: string): Promise<void
         status: due <= 0 ? "PAID" : paid > 0 ? "PARTIALLY_PAID" : "ISSUED",
       },
     });
+  }
+
+  if (order.customerId) {
+    await recalcCustomerRollup(tx, order.customerId);
   }
 }
 
@@ -473,7 +504,7 @@ export async function setOrderStatus(
 ): Promise<void> {
   const order = await tx.order.findUnique({
     where: { id: params.orderId },
-    select: { status: true, readyAt: true, deliveredAt: true },
+    select: { status: true, readyAt: true, deliveredAt: true, customerId: true },
   });
   if (!order) throw new NotFoundError("Order not found");
   if (order.status === params.status) return;
@@ -500,4 +531,9 @@ export async function setOrderStatus(
       note: params.note ?? null,
     },
   });
+
+  // Cancelling drops the order out of the customer's lifetime figures.
+  if (order.customerId && (params.status === "CANCELLED" || order.status === "CANCELLED")) {
+    await recalcCustomerRollup(tx, order.customerId);
+  }
 }

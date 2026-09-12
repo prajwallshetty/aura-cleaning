@@ -49,7 +49,7 @@ export const completeDeliverySchema = z.object({
   receivedByName: optionalText(120),
   amountCollected: moneySchema.default(0),
   collectionMethod: z
-    .enum(["CASH", "UPI", "CARD", "ONLINE", "BANK_TRANSFER"])
+    .enum(["CASH", "UPI", "CARD", "ONLINE", "BANK_TRANSFER", "OTHER"])
     .default("CASH"),
   failureReason: optionalText(300),
   rescheduledFor: z

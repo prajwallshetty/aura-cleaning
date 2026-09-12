@@ -5,17 +5,17 @@ import { assertBranchAccess, requirePermission } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getTagSheet } from "@/lib/services/tags";
 
-import { TagStudio } from "./tag-studio";
+import { ReceiptStudio } from "./receipt-studio";
 
-export const metadata = { title: "Print tags" };
+export const metadata = { title: "Print receipt" };
 
-export default async function OrderTagsPage({
+export default async function OrderReceiptPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requirePermission(PERMISSIONS.GARMENT_VIEW);
+  const user = await requirePermission(PERMISSIONS.BILLING_VIEW);
 
   const owner = await prisma.order.findUnique({
     where: { id },
@@ -25,5 +25,5 @@ export default async function OrderTagsPage({
   assertBranchAccess(user, owner.branchId);
 
   const sheet = await getTagSheet(id);
-  return <TagStudio sheet={sheet} />;
+  return <ReceiptStudio sheet={sheet} />;
 }

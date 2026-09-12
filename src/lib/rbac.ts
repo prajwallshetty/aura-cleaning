@@ -59,6 +59,10 @@ export const PERMISSIONS = {
   INVENTORY_TRANSFER: "inventory.transfer",
   INVENTORY_ADJUST: "inventory.adjust",
 
+  // Customers
+  CUSTOMER_VIEW: "customers.view",
+  CUSTOMER_MANAGE: "customers.manage",
+
   // Purchases
   PURCHASE_VIEW: "purchases.view",
   PURCHASE_MANAGE: "purchases.manage",
@@ -129,6 +133,8 @@ const COUNTER_STAFF_PERMISSIONS: PermissionCode[] = [
   P.GARMENT_SCAN,
   P.GARMENT_UPDATE,
   P.GARMENT_PHOTO_UPLOAD,
+  P.CUSTOMER_VIEW,
+  P.CUSTOMER_MANAGE,
   P.PROCESSING_VIEW,
   P.RACK_VIEW,
   P.RACK_ASSIGN,
@@ -158,6 +164,7 @@ const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
   P.DASHBOARD_VIEW_ALL_BRANCHES,
   P.ORDER_VIEW,
   P.GARMENT_VIEW,
+  P.CUSTOMER_VIEW,
   P.BILLING_VIEW,
   P.BILLING_CREATE_INVOICE,
   P.BILLING_RECORD_PAYMENT,
@@ -288,6 +295,8 @@ export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   [P.GARMENT_SCAN]: "Scan garment QR codes and barcodes",
   [P.GARMENT_UPDATE]: "Edit garment details",
   [P.GARMENT_PHOTO_UPLOAD]: "Upload garment photos",
+  [P.CUSTOMER_VIEW]: "View the customer directory and order history",
+  [P.CUSTOMER_MANAGE]: "Add and edit customer records",
   [P.PROCESSING_VIEW]: "View processing workstations",
   [P.PROCESSING_SORTING]: "Operate the sorting workstation",
   [P.PROCESSING_WASHING]: "Operate the washing workstation",

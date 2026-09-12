@@ -40,6 +40,7 @@ export const SEQUENCE_KEYS = {
   B2B_ACCOUNT: "b2b_account",
   SUPPLIER: "supplier",
   EMPLOYEE: "employee",
+  CUSTOMER: "customer",
 } as const;
 
 function pad(value: number, width: number): string {
@@ -114,5 +115,7 @@ export const nextStatementNumber = (db?: Db) =>
   nextDocumentNumber(SEQUENCE_KEYS.STATEMENT, "STM", 5, db);
 export const nextContractNumber = (db?: Db) =>
   nextDocumentNumber(SEQUENCE_KEYS.CONTRACT, "CNT", 5, db);
+export const nextCustomerCode = (db?: Db) =>
+  nextDocumentNumber(SEQUENCE_KEYS.CUSTOMER, "CUS", 5, db);
 export const nextEmployeeCode = (db?: Db) =>
   nextDocumentNumber(SEQUENCE_KEYS.EMPLOYEE, "EMP", 4, db);
