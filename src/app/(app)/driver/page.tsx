@@ -105,7 +105,7 @@ export default async function DriverPage() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Pickups" value={pickups.length} icon={Package} />
         <StatCard label="Deliveries" value={deliveries.length} icon={Truck} tone="info" />
         <StatCard
@@ -125,7 +125,7 @@ export default async function DriverPage() {
         {deliveries.length === 0 ? (
           <EmptyState title="No deliveries assigned" description="Nothing to drop off right now." />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {deliveries.map((delivery) => (
               <Card key={delivery.id}>
                 <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
@@ -215,7 +215,7 @@ export default async function DriverPage() {
         {pickups.length === 0 ? (
           <EmptyState title="No pickups assigned" description="Nothing to collect right now." />
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {pickups.map((pickup) => (
               <Card key={pickup.id}>
                 <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">

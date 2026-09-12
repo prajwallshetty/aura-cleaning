@@ -1006,14 +1006,14 @@ async function seedB2B(
 
 async function seedNotificationTemplates() {
   const templates = [
-    { event: "ORDER_RECEIVED", name: "Order received", channel: "WHATSAPP" },
-    { event: "ORDER_READY", name: "Order ready", channel: "WHATSAPP" },
-    { event: "OUT_FOR_DELIVERY", name: "Out for delivery", channel: "SMS" },
-    { event: "DELIVERED", name: "Delivered", channel: "WHATSAPP" },
-    { event: "PAYMENT_RECEIVED", name: "Payment received", channel: "SMS" },
-    { event: "PAYMENT_REMINDER", name: "Payment reminder", channel: "WHATSAPP" },
-    { event: "ORDER_DELAYED", name: "Order delayed", channel: "WHATSAPP" },
-    { event: "PICKUP_SCHEDULED", name: "Pickup scheduled", channel: "SMS" },
+    { event: "ORDER_RECEIVED", name: "Order received", channel: "IN_APP" },
+    { event: "ORDER_READY", name: "Order ready", channel: "IN_APP" },
+    { event: "OUT_FOR_DELIVERY", name: "Out for delivery", channel: "IN_APP" },
+    { event: "DELIVERED", name: "Delivered", channel: "IN_APP" },
+    { event: "PAYMENT_RECEIVED", name: "Payment received", channel: "IN_APP" },
+    { event: "PAYMENT_REMINDER", name: "Payment reminder", channel: "IN_APP" },
+    { event: "ORDER_DELAYED", name: "Order delayed", channel: "IN_APP" },
+    { event: "PICKUP_SCHEDULED", name: "Pickup scheduled", channel: "IN_APP" },
     { event: "COMPLAINT_REGISTERED", name: "Complaint registered", channel: "EMAIL" },
     { event: "COMPLAINT_RESOLVED", name: "Complaint resolved", channel: "EMAIL" },
   ] as const;
@@ -1035,6 +1035,18 @@ async function seedNotificationTemplates() {
       }),
     ),
   );
+
+  // Templates are configuration rather than transactional data, so they are not
+  // cleared with everything else — retire any that are no longer in the list.
+  await prisma.notificationTemplate.deleteMany({
+    where: {
+      code: {
+        notIn: templates.map(
+          (template) => `${template.event.toLowerCase()}_${template.channel.toLowerCase()}`,
+        ),
+      },
+    },
+  });
 
   console.log(`  ${templates.length} notification templates`);
 }

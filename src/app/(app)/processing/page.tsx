@@ -57,13 +57,13 @@ export default async function ProcessingPage({
         description="Every workstation on the floor. Scan a garment, press one button, move on."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Waiting" value={totalPending} icon={Package} tone="warning" />
         <StatCard label="In progress" value={totalInProgress} tone="info" />
         <StatCard label="Rewash / rework" value={totalRemediation} tone="danger" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {WORKSTATION_STAGES.map((stage) => {
           const stageCounts = counts.get(stage) ?? {};
           const pending = stageCounts.PENDING ?? 0;

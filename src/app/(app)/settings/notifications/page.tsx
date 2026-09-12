@@ -54,7 +54,7 @@ export default async function NotificationsPage({
     <div className="space-y-5">
       <PageHeader
         title="Notifications"
-        description="Templates for WhatsApp, SMS and email, plus every message the system has sent."
+        description="Templates for counter notices and email, plus every message the system has raised."
         actions={
           <>
             <Button asChild variant="outline" size="icon" aria-label="Back to settings">
@@ -67,7 +67,7 @@ export default async function NotificationsPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Templates" value={templates.length} icon={Bell} />
         <StatCard label="Messages sent" value={sent} tone="success" />
         <StatCard label="Failed" value={failed} tone={failed > 0 ? "danger" : "default"} />
@@ -87,7 +87,7 @@ export default async function NotificationsPage({
               description="Without templates the system falls back to built-in default wording."
             />
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {templates.map((template) => (
                 <Card key={template.id}>
                   <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
@@ -142,8 +142,8 @@ export default async function NotificationsPage({
             />
           ) : (
             <Card>
-              <CardContent className="p-0">
-                <table className="w-full text-sm">
+              <CardContent className="overflow-x-auto p-0">
+                <table className="w-full min-w-[420px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="px-4 py-2.5 text-left">When</th>

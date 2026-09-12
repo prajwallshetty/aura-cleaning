@@ -14,15 +14,16 @@ import {
   ClipboardList,
   Clock3,
   Droplets,
-  FileText,
   MoreHorizontal,
   PackageCheck,
+  Printer,
   RefreshCw,
+  ScanLine,
   Search,
   Sparkles,
-  Truck,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 
 import { formatCompactCurrency, formatCurrency } from "@/lib/money";
@@ -44,10 +45,34 @@ const RANGES: { key: RangeKey; label: string; days: number; buckets: number }[] 
 
 const QUICK_ACTIONS = [
   { label: "New Order", href: "/orders/new", icon: ClipboardList, tone: "#2a78d6" },
-  { label: "Pickup", href: "/delivery?tab=pickups", icon: Truck, tone: "#eb6834" },
-  { label: "Delivery", href: "/delivery?tab=deliveries", icon: PackageCheck, tone: "#1baf7a" },
-  { label: "Invoice", href: "/billing", icon: FileText, tone: "#7a5cd6" },
+  { label: "Scan Tag", href: "/scan", icon: ScanLine, tone: "#eb6834" },
+  { label: "Orders", href: "/orders", icon: PackageCheck, tone: "#1baf7a" },
+  { label: "Print Tag", href: "/tags", icon: Printer, tone: "#7a5cd6" },
+  { label: "Customers", href: "/customers", icon: Users, tone: "#0f7f96" },
+  { label: "Payments", href: "/billing", icon: Wallet, tone: "#c2185b" },
 ];
+
+/** The counter's morning read, in the order they scan the room. */
+const METRIC_TILES = [
+  { key: "totalOrders", label: "Total orders", href: "/orders", money: false },
+  { key: "todayOrders", label: "Today's orders", href: "/orders?range=today", money: false },
+  { key: "pendingOrders", label: "Pending", href: "/orders?status=active", money: false },
+  { key: "washingOrders", label: "Washing", href: "/orders?status=WASHING", money: false },
+  { key: "readyOrders", label: "Ready", href: "/orders?status=READY", money: false },
+  {
+    key: "deliveredOrders",
+    label: "Delivered",
+    href: "/orders?status=DELIVERED",
+    money: false,
+  },
+  { key: "todayRevenue", label: "Today's revenue", href: "/billing", money: true },
+  {
+    key: "pendingPayments",
+    label: "Pending payments",
+    href: "/billing?tab=outstanding",
+    money: true,
+  },
+] as const;
 
 export function OverviewDashboard({
   data,
@@ -176,6 +201,21 @@ export function OverviewDashboard({
     [needle],
   );
 
+  const tiles = useMemo(
+    () =>
+      (needle
+        ? METRIC_TILES.filter((tile) => tile.label.toLowerCase().includes(needle))
+        : METRIC_TILES
+      ).map((tile) => ({
+        ...tile,
+        value: tile.money
+          ? formatCompactCurrency(data.metrics[tile.key])
+          : data.metrics[tile.key].toLocaleString("en-IN"),
+        hidden: tile.money && !canSeeRevenue,
+      })),
+    [needle, data.metrics, canSeeRevenue],
+  );
+
   return (
     <div className="min-h-dvh bg-[#d6d7e1] px-3 py-4 sm:px-6 sm:py-8 lg:px-8 lg:py-10 [--ov-series-orders:#eb6834] [--ov-series-revenue:#2a78d6] [--ov-series-completed:#1baf7a]">
       <div className="mx-auto w-full max-w-[1180px] overflow-hidden rounded-[22px] bg-white shadow-[0_30px_70px_-28px_rgba(28,34,64,0.45)]">
@@ -220,6 +260,8 @@ export function OverviewDashboard({
                 <QuickActionsCard actions={actions} filtered={Boolean(needle)} />
               </div>
             </div>
+
+            <MetricStrip tiles={tiles} filtered={Boolean(needle)} />
 
             <PerformanceSection
               points={chartPoints}
@@ -571,6 +613,61 @@ function QuickActionsCard({
           </Link>
         )}
       </div>
+    </section>
+  );
+}
+
+/* ========================================================================== */
+/*  Metric strip                                                              */
+/* ========================================================================== */
+
+/**
+ * The eight counter figures, as one band between the summary cards and the
+ * chart. Deliberately quiet — the reference's composition is the point, so
+ * these read as a row of labels rather than another set of hero cards.
+ */
+function MetricStrip({
+  tiles,
+  filtered,
+}: {
+  tiles: Array<{
+    key: string;
+    label: string;
+    href: string;
+    value: string;
+    hidden: boolean;
+  }>;
+  filtered: boolean;
+}) {
+  const visible = tiles.filter((tile) => !tile.hidden);
+
+  if (visible.length === 0) {
+    return filtered ? (
+      <p className="mt-3.5 rounded-[18px] bg-white p-4 text-[11.5px] text-[#9aa0b1] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        No figure matches that search.
+      </p>
+    ) : null;
+  }
+
+  return (
+    <section
+      aria-label="Today at a glance"
+      className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+    >
+      {visible.map((tile) => (
+        <Link
+          key={tile.key}
+          href={tile.href}
+          className="group rounded-[14px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-22px_rgba(16,24,40,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-10px_rgba(16,24,40,0.3)]"
+        >
+          <span className="block truncate text-[10.5px] uppercase tracking-[0.06em] text-[#9aa0b1]">
+            {tile.label}
+          </span>
+          <span className="mt-0.5 block truncate text-[19px] font-semibold leading-tight tracking-[-0.01em] text-[#1b2136]">
+            {tile.value}
+          </span>
+        </Link>
+      ))}
     </section>
   );
 }

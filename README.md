@@ -61,7 +61,7 @@ delivery actually need them.
 | Charts | Recharts, on a CVD-validated categorical palette |
 | Files | S3-compatible object storage (AWS S3 / Cloudflare R2 / Supabase) |
 | Payments | Provider-abstracted — manual counter and Razorpay included |
-| Messaging | WhatsApp Cloud API, SMS, email — all behind one transport interface |
+| Messaging | In-app notices, plus optional transactional email — no WhatsApp or SMS gateway |
 
 Server Components do the data work; Client Components appear only where there is
 real interactivity (scanners, forms, charts, dialogs).
@@ -139,9 +139,13 @@ see the authorisation layer work.
 ### The order lifecycle
 
 ```
-Received → Sorting → Washing → Drying → Ironing → Quality Check
-        → Packing → Ready → Out for Delivery → Delivered
+Received → Washing → Drying → Ironing → Packing → Ready → Delivered
 ```
+
+That is the standard route through the shop, and what the order screens describe.
+Sorting and quality control remain real workstations a service can opt into — the
+seeded Premium Care route still runs a formal QC step — they are simply not on the
+default pipeline.
 
 With first-class support for partial delivery, cancellation, refund, rewash, rework
 and failed delivery.
@@ -174,10 +178,16 @@ least-advanced garment is queued at. Money is derived the same way:
 `recalcOrderPayments` re-reads captured payments and processed refunds rather than
 trusting an incrementally maintained balance.
 
-Two tables are append-only by contract:
+Customer lifetime figures follow the same rule: `recalcCustomerRollup` re-counts a
+customer's orders, spend and outstanding balance whenever either changes. The order
+still carries its own snapshot of the customer's name, phone and address, so editing
+a directory entry never rewrites an invoice that has already been issued.
+
+Three tables are append-only by contract:
 
 - `GarmentStatusHistory` — every status change a garment has ever had
 - `GarmentLocationHistory` — every physical move
+- `ScanEvent` — every tag scan, successful or not, and what was done next
 
 ---
 
@@ -186,9 +196,12 @@ Two tables are append-only by contract:
 | Module | Route | Highlights |
 |---|---|---|
 | Dashboard | `/dashboard` | Live operational counters, revenue and volume charts, station queue depth, branch performance. Filter by date, branch, service and status. |
-| Orders | `/orders` | Booking with live server-side pricing, GST, advances, invoice generation, lifecycle transitions, cancel/refund/rewash, printable garment tags. |
+| Orders | `/orders` | Booking with a customer directory lookup, live server-side pricing, GST, advances, invoice generation, lifecycle transitions, cancel/refund/rewash. |
+| Scan tag | `/scan` | The counter's scanner. Camera, QR, barcode or a USB/Bluetooth gun; resolves an order or garment tag to the order, with one-tap status changes, payment, tag reprint and a persistent scan history. Rescanning a tag reopens the order it already found. |
+| Print tags | `/tags`, `/orders/:id/tags` | Thermal tag studio at 58 mm, 80 mm or a custom 40–120 mm width. Order tag, per-garment tags or both; print, reprint, print all, and a print preview. Prints are counted and audited. A separate GST receipt prints at `/orders/:id/receipt`. |
+| Customers | `/customers` | Directory searchable by name, phone, customer code or an order number they placed. Order history, lifetime spend, balance owed, repeat indicator, and one-click booking from the profile. |
 | Garments | `/garments` | Per-garment record, immutable ledger, stage timings, movement history, photos, printable tag. |
-| Scan | `/garments/scan` | Camera or hardware-scanner lookup answering "where is this?" with full history. |
+| Garment lookup | `/garments/scan` | Camera or hardware-scanner lookup answering "where is this piece?" with its full history. |
 | Processing | `/processing` | One screen per station, scanner-first, large targets, bulk actions, QC failure routing. |
 | Rack & location | `/racks` | Branch → rack → slot map with capacity and occupancy; click any slot to see what is in it. |
 | Pickup & delivery | `/delivery`, `/driver` | Scheduling, driver assignment, dispatch, door-step collection, failed and rescheduled attempts, plus a mobile-first driver view. |
@@ -244,11 +257,14 @@ ever sees the public key and an order id. `buildUpiIntentUri` generates a dynami
 QR for the exact amount.
 
 **Notifications** (`src/lib/providers/notifications.ts`)
-WhatsApp Cloud API, a Twilio-shaped SMS gateway and transactional email. Templates
-are database-backed with `{{placeholder}}` substitution and a built-in fallback.
-`NOTIFICATIONS_DRIVER=log` prints to the server log so development never sends real
-messages. Delivery failures never roll back the business operation that triggered
-them; each attempt is recorded in `NotificationLog`.
+The application does not integrate WhatsApp or SMS. Customer notices are raised
+on the in-app channel — stored, listed in the notification centre, and read out
+or printed at the counter — so a deployment needs no messaging credentials at
+all. Transactional email is the one channel that reaches outside and stays
+inert unless `EMAIL_API_KEY` and `EMAIL_FROM` are both set. Templates are
+database-backed with `{{placeholder}}` substitution and a built-in fallback.
+Delivery failures never roll back the business operation that triggered them;
+each attempt is recorded in `NotificationLog`.
 
 ---
 

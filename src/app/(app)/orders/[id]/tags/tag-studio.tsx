@@ -161,7 +161,7 @@ export function TagStudio({ sheet }: { sheet: TagSheet }) {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)] no-print">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_minmax(0,1fr)] no-print">
         <Card>
           <CardContent className="space-y-5 pt-6">
             <div className="space-y-2">
@@ -234,11 +234,15 @@ export function TagStudio({ sheet }: { sheet: TagSheet }) {
                     <option.icon className="size-4" />
                     {option.label}
                     <span className="ml-auto text-xs text-muted-foreground">
-                      {option.value === "ORDER"
-                        ? "1 tag"
-                        : option.value === "GARMENTS"
-                          ? `${sheet.garments.length} tags`
-                          : `${sheet.garments.length + 1} tags`}
+                      {(() => {
+                        const count =
+                          option.value === "ORDER"
+                            ? 1
+                            : option.value === "GARMENTS"
+                              ? sheet.garments.length
+                              : sheet.garments.length + 1;
+                        return `${count} tag${count === 1 ? "" : "s"}`;
+                      })()}
                     </span>
                   </button>
                 ))}

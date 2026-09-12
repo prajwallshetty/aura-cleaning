@@ -8,6 +8,7 @@ import {
   MessageSquareWarning,
   Package,
   Receipt,
+  ScanLine,
   Settings,
   Shirt,
   ShoppingCart,
@@ -61,6 +62,18 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/orders",
         icon: ClipboardList,
         permissions: [PERMISSIONS.ORDER_VIEW],
+      },
+      {
+        label: "Scan Tag",
+        href: "/scan",
+        icon: ScanLine,
+        permissions: [PERMISSIONS.GARMENT_SCAN],
+      },
+      {
+        label: "Customers",
+        href: "/customers",
+        icon: Users,
+        permissions: [PERMISSIONS.CUSTOMER_VIEW],
       },
       {
         label: "Garments",

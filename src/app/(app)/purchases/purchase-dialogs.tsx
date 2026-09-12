@@ -81,7 +81,7 @@ export function NewSupplierDialog() {
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Code" required error={fieldErrors.code}>
             <Input
               value={form.code}
@@ -240,7 +240,7 @@ export function NewPurchaseOrderDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Supplier" required>
             <Select value={supplierId} onValueChange={setSupplierId}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -303,7 +303,7 @@ export function NewPurchaseOrderDialog({
           {lines.map((line) => {
             const item = items.find((candidate) => candidate.id === line.itemId);
             return (
-              <div key={line.key} className="grid gap-2 rounded-lg border border-border p-2 sm:grid-cols-12">
+              <div key={line.key} className="grid grid-cols-1 gap-2 rounded-lg border border-border p-2 sm:grid-cols-12">
                 <div className="sm:col-span-5">
                   <Select
                     value={line.itemId}
@@ -595,7 +595,7 @@ export function SupplierPaymentDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Supplier" required className="sm:col-span-2">
             <Select
               value={supplierId}

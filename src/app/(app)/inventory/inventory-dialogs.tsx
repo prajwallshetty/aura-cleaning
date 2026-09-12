@@ -89,7 +89,7 @@ export function NewItemDialog() {
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="SKU" required error={fieldErrors.sku}>
             <Input
               value={form.sku}
@@ -219,7 +219,7 @@ export function StockMovementDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Item" required className="sm:col-span-2">
             <Select value={form.itemId} onValueChange={(itemId) => set({ itemId })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -374,7 +374,7 @@ export function TransferStockDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Item" required className="sm:col-span-2">
             <Select value={form.itemId} onValueChange={(itemId) => set({ itemId })}>
               <SelectTrigger><SelectValue /></SelectTrigger>

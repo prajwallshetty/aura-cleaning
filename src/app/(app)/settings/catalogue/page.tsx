@@ -72,7 +72,7 @@ export default async function CataloguePage() {
               description="Add the services you offer — wash and fold, dry clean, ironing…"
             />
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {services.map((service) => (
                 <Card key={service.id}>
                   <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
@@ -132,8 +132,8 @@ export default async function CataloguePage() {
             />
           ) : (
             <Card>
-              <CardContent className="p-0">
-                <table className="w-full text-sm">
+              <CardContent className="overflow-x-auto p-0">
+                <table className="w-full min-w-[420px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="px-4 py-2.5 text-left">Garment</th>
@@ -195,7 +195,7 @@ export default async function CataloguePage() {
                 </p>
               </CardHeader>
               <CardContent className="overflow-x-auto scrollbar-thin p-0">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[420px] text-sm">
                   <thead>
                     <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="sticky left-0 bg-card px-4 py-2.5 text-left">

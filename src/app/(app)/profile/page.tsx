@@ -37,7 +37,7 @@ export default async function ProfilePage() {
         </Alert>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex-row items-center gap-3 space-y-0">
             <Avatar className="size-12">

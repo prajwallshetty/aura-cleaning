@@ -246,7 +246,7 @@ export default async function StaffPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Active staff" value={activeCount} icon={Users} />
         <StatCard
           label="Present today"

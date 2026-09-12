@@ -136,7 +136,7 @@ export default async function StaffDetailPage({
         </div>
       </PageHeader>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Tasks completed (30d)" value={completedTasks} />
         <StatCard label="Days present (30d)" value={presentDays} tone="success" />
         <StatCard
@@ -145,7 +145,7 @@ export default async function StaffDetailPage({
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader className="flex-row items-center gap-3 space-y-0">
             <Avatar className="size-12">
@@ -243,13 +243,13 @@ export default async function StaffDetailPage({
 
             <TabsContent value="attendance">
               <Card>
-                <CardContent className="p-0">
+                <CardContent className="overflow-x-auto p-0">
                   {staff.attendances.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       No attendance recorded yet.
                     </p>
                   ) : (
-                    <table className="w-full text-sm">
+                    <table className="w-full min-w-[420px] text-sm">
                       <thead>
                         <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                           <th className="px-4 py-2.5 text-left">Date</th>

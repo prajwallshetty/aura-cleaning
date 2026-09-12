@@ -41,7 +41,7 @@ const SECTIONS: {
   {
     href: "/settings/notifications",
     title: "Notifications",
-    description: "WhatsApp, SMS and email templates plus the delivery log",
+    description: "Counter and email notice templates plus the delivery log",
     icon: Bell,
     permission: PERMISSIONS.NOTIFICATION_VIEW,
   },
@@ -83,7 +83,7 @@ export default async function SettingsPage() {
         description="Configure the business, its catalogue and how it talks to customers."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((section) => (
           <Link key={section.href} href={section.href}>
             <Card className="h-full transition-shadow hover:shadow-md">

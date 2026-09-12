@@ -21,6 +21,10 @@ import { FormError, FormField } from "@/components/shared/form-field";
 import { formatCurrency } from "@/lib/money";
 import { createOrderAction, quoteOrderAction } from "@/app/(app)/orders/actions";
 import type { FieldErrors } from "@/lib/action-result";
+import {
+  CustomerPicker,
+  type PickedCustomer,
+} from "@/app/(app)/orders/new/customer-picker";
 
 export interface ServiceOption {
   id: string;
@@ -61,6 +65,7 @@ interface LineItem {
 }
 
 interface OrderFormProps {
+  initialCustomer: PickedCustomer | null;
   services: ServiceOption[];
   garmentTypes: GarmentTypeOption[];
   branches: BranchOption[];
@@ -89,6 +94,7 @@ function defaultDueDate(hours: number): string {
 }
 
 export function OrderForm({
+  initialCustomer,
   services,
   garmentTypes,
   branches,
@@ -107,13 +113,25 @@ export function OrderForm({
   const [priority, setPriority] = useState("NORMAL");
   const [b2bAccountId, setB2bAccountId] = useState("none");
 
-  const [customerName, setCustomerName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [addressLine, setAddressLine] = useState("");
-  const [city, setCity] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [landmark, setLandmark] = useState("");
+  const [customer, setCustomer] = useState<PickedCustomer | null>(initialCustomer);
+  const [customerName, setCustomerName] = useState(initialCustomer?.name ?? "");
+  const [customerPhone, setCustomerPhone] = useState(initialCustomer?.phone ?? "");
+  const [customerEmail, setCustomerEmail] = useState(initialCustomer?.email ?? "");
+  const [addressLine, setAddressLine] = useState(initialCustomer?.addressLine ?? "");
+  const [city, setCity] = useState(initialCustomer?.city ?? "");
+  const [pincode, setPincode] = useState(initialCustomer?.pincode ?? "");
+  const [landmark, setLandmark] = useState(initialCustomer?.landmark ?? "");
+
+  const applyCustomer = (picked: PickedCustomer) => {
+    setCustomer(picked);
+    setCustomerName(picked.name);
+    setCustomerPhone(picked.phone);
+    setCustomerEmail(picked.email ?? "");
+    setAddressLine(picked.addressLine ?? "");
+    setCity(picked.city ?? "");
+    setPincode(picked.pincode ?? "");
+    setLandmark(picked.landmark ?? "");
+  };
 
   const [expectedDeliveryAt, setExpectedDeliveryAt] = useState(() =>
     defaultDueDate(services[0]?.turnaroundHours ?? 48),
@@ -228,6 +246,7 @@ export function OrderForm({
         branchId,
         type,
         priority,
+        customerId: customer?.id ?? null,
         customerName,
         customerPhone,
         customerEmail,
@@ -273,7 +292,7 @@ export function OrderForm({
 
   return (
     <form
-      className="grid gap-5 lg:grid-cols-3"
+      className="grid grid-cols-1 gap-5 lg:grid-cols-3"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -286,7 +305,15 @@ export function OrderForm({
           <CardHeader>
             <CardTitle>Customer & booking</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <CustomerPicker
+                selected={customer}
+                onSelect={applyCustomer}
+                onClear={() => setCustomer(null)}
+              />
+            </div>
+
             <FormField label="Customer name" htmlFor="customerName" required error={fieldErrors.customerName}>
               <Input
                 id="customerName"
@@ -464,7 +491,7 @@ export function OrderForm({
               return (
                 <div
                   key={item.key}
-                  className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-12"
+                  className="grid grid-cols-1 gap-3 rounded-lg border border-border p-3 sm:grid-cols-12"
                 >
                   <div className="sm:col-span-4">
                     <FormField label="Service">
@@ -584,7 +611,7 @@ export function OrderForm({
           <CardHeader>
             <CardTitle>Notes</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-3">
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <FormField label="Special instructions">
               <Textarea
                 value={specialInstructions}
@@ -653,7 +680,7 @@ export function OrderForm({
             <Separator />
 
             {canDiscount ? (
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <FormField label="Discount ₹">
                   <Input
                     type="number"
@@ -685,7 +712,7 @@ export function OrderForm({
               </div>
             ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <FormField label="Advance ₹" error={fieldErrors.advanceAmount}>
                 <Input
                   type="number"

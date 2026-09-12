@@ -104,7 +104,7 @@ export default async function InvoicePage({
 
         <Separator className="my-5" />
 
-        <section className="grid gap-4 sm:grid-cols-2">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Billed to
@@ -165,7 +165,8 @@ export default async function InvoicePage({
 
         <Separator className="my-5" />
 
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px] text-sm">
           <thead>
             <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
               <th className="py-2 text-left">Description</th>
@@ -185,6 +186,7 @@ export default async function InvoicePage({
             ))}
           </tbody>
         </table>
+        </div>
 
         <div className="mt-5 flex justify-end">
           <dl className="w-full max-w-xs space-y-1.5 text-sm">

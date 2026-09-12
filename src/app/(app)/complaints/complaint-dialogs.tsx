@@ -95,7 +95,7 @@ export function NewComplaintDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Type" required>
             <Select value={form.type} onValueChange={(type) => set({ type })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -296,7 +296,7 @@ export function ComplaintWorkflow({
   return (
     <div className="space-y-4">
       {canManage && !closed ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <FormField label="Status">
             <Select value={status} onValueChange={(value) => save({ status: value })}>
               <SelectTrigger><SelectValue /></SelectTrigger>

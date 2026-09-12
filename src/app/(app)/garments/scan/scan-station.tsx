@@ -67,7 +67,7 @@ export function ScanStation() {
     }));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-5">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
       <div className="space-y-4 lg:col-span-2">
         <Card>
           <CardHeader>
@@ -126,7 +126,7 @@ export function ScanStation() {
               <StatusBadge status={result.status} label={result.statusLabel} dot />
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <InfoBlock
                   icon={MapPin}
                   label="Current location"

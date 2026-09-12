@@ -78,7 +78,7 @@ export function ReceiptStudio({ sheet }: { sheet: TagSheet }) {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)] no-print">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[320px_minmax(0,1fr)] no-print">
         <Card>
           <CardContent className="space-y-4 pt-6">
             <Label>Paper width</Label>

@@ -58,7 +58,7 @@ export function NewRackDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {branches.length > 1 ? (
             <FormField label="Branch" required className="sm:col-span-2">
               <Select value={branchId} onValueChange={setBranchId}>
@@ -185,7 +185,7 @@ export function GenerateSlotsDialog({
             {String(startAt).padStart(2, "0")} onwards.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="How many">
             <Input
               type="number"

@@ -211,7 +211,7 @@ export default async function B2BPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label="Accounts" value={accounts.length} icon={Building2} />
         <StatCard
           label="Credit outstanding"

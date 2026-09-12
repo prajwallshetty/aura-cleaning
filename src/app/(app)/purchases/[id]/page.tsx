@@ -87,14 +87,14 @@ export default async function PurchaseOrderPage({
         </div>
       </PageHeader>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Card>
             <CardHeader>
               <CardTitle>Items</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <table className="w-full text-sm">
+            <CardContent className="overflow-x-auto p-0">
+              <table className="w-full min-w-[420px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-4 py-2.5 text-left">Item</th>

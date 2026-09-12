@@ -93,7 +93,7 @@ export const notificationTemplateSchema = z.object({
     .max(60)
     .regex(/^[a-z0-9_]+$/, "Use lowercase letters, digits and underscores"),
   name: z.string().trim().min(2, "Name is required").max(80),
-  channel: z.enum(["WHATSAPP", "SMS", "EMAIL"]),
+  channel: z.enum(["IN_APP", "EMAIL"]),
   event: z.enum([
     "ORDER_RECEIVED",
     "PROCESSING_STARTED",

@@ -104,7 +104,7 @@ export function NewAccountDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Account code" required error={fieldErrors.code}>
             <Input
               value={form.code}
@@ -269,7 +269,7 @@ export function NewContractDialog({ accountId }: { accountId: string }) {
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Start date" required>
             <Input
               type="date"
@@ -392,7 +392,7 @@ export function RateCardDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Service" required>
             <Select value={form.serviceId} onValueChange={(serviceId) => set({ serviceId })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -551,7 +551,7 @@ export function ScheduleDialog({ accountId }: { accountId: string }) {
             A recurring slot the operations team plans routes around.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Type">
             <Select value={form.type} onValueChange={(type) => set({ type })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -674,7 +674,7 @@ export function GenerateStatementDialog({ accountId }: { accountId: string }) {
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Period start" required>
             <Input
               type="date"

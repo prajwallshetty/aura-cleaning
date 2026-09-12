@@ -122,7 +122,7 @@ export default async function B2BAccountPage({
         </div>
       </PageHeader>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Orders" value={lifetime._count._all} />
         <StatCard
           label="Lifetime value"
@@ -144,7 +144,7 @@ export default async function B2BAccountPage({
         />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle>Account</CardTitle>
@@ -300,13 +300,13 @@ export default async function B2BAccountPage({
 
             <TabsContent value="orders">
               <Card>
-                <CardContent className="p-0">
+                <CardContent className="overflow-x-auto p-0">
                   {account.orders.length === 0 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       No orders booked for this account yet.
                     </p>
                   ) : (
-                    <table className="w-full text-sm">
+                    <table className="w-full min-w-[420px] text-sm">
                       <thead>
                         <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                           <th className="px-4 py-2.5 text-left">Order</th>

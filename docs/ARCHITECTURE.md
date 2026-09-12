@@ -31,6 +31,35 @@ Prisma returns `Decimal`, which React Server Components cannot pass to Client
 Components. `num()` converts at the boundary; `plain()` in `src/lib/serialize.ts` deep
 -converts a whole query result when needed.
 
+## A customer is a directory entry, not the billing record
+
+Orders keep their own copy of the customer's name, phone, email and address. The
+`Customer` row is the searchable directory and the place lifetime figures live; it is
+created the first time a phone number is seen at a branch (`upsertCustomer`) and its
+totals are re-derived by `recalcCustomerRollup` whenever an order or a payment
+changes, on the same "recompute, never increment" rule as the order money columns.
+Editing a directory entry therefore cannot rewrite an invoice already issued.
+
+## Scanning resolves to an order, and never duplicates one
+
+`resolveScan` accepts an order tag, a garment tag, a bare order number or a bare
+garment code and answers with the same order card. Scanning a tag that is already
+open reopens it rather than starting anything new, which is what makes a jumpy
+hardware scanner safe at a counter. Every attempt — including the ones that fail and
+the ones refused for branch access — is written to `ScanEvent`, together with any
+action taken from the card, because "the tag would not scan" is a real support
+question and the log is the answer.
+
+## Tags print to a roll, not a page
+
+The tag studio renders at a real millimetre width and injects the matching
+`@page { size: <n>mm auto; margin: 0 }` rule, so the on-screen preview is the size of
+the paper. Printing sets `data-print-mode="thermal"` on `<body>`, which blanks the
+application and leaves only `.thermal-print-root` — a roll printer has no page
+furniture to spare. Everything inside is forced to pure black on white. Prints are
+counted on the order (`tagPrintCount`), so a reprint is distinguishable from the
+original both on the tag and in the audit log.
+
 ## Document numbers are allocated atomically
 
 `nextSequence` uses a single `INSERT … ON CONFLICT DO UPDATE … RETURNING` against the
@@ -65,8 +94,16 @@ server-side — the filter is a courtesy, not the control.
 - `assertBranchAccess(user, branchId)` — reject cross-branch reads and writes.
 - `requireWriteBranch(user, requested)` — decide which branch a new record belongs to.
 
-The middleware checks only for the presence of a session. It runs on the edge and
-cannot see the database, so it is a convenience redirect and never the boundary.
+The proxy (`src/proxy.ts`) checks only for the presence of a session, so it is a
+convenience redirect and never the boundary.
+
+## Messaging leaves the building only by email
+
+There is no WhatsApp or SMS integration. Notifications are raised on the `IN_APP`
+channel — stored, listed in the notification centre, and read out or printed at the
+counter — so a deployment needs no messaging credentials to be complete. Email is the
+one channel that reaches outside and stays inert unless `EMAIL_API_KEY` and
+`EMAIL_FROM` are both set.
 
 ## Charts
 

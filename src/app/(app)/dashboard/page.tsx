@@ -166,7 +166,7 @@ export default async function DashboardPage({
         ]}
       />
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Today's orders"
           value={metrics.todayOrders}
@@ -224,7 +224,7 @@ export default async function DashboardPage({
       </section>
 
       {canSeeMoney ? (
-        <section className="grid gap-3 sm:grid-cols-3">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatCard
             label="Today's revenue"
             value={formatCurrency(metrics.todayRevenue)}
@@ -249,7 +249,7 @@ export default async function DashboardPage({
       ) : null}
 
       {canSeeMoney ? (
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <RevenueChart data={series} />
           <OrderVolumeChart data={series} />
         </section>
@@ -257,7 +257,7 @@ export default async function DashboardPage({
         <OrderVolumeChart data={series} />
       )}
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PipelineChart data={pipeline} />
         <CategoryBarChart
           title="Orders by status"
@@ -270,7 +270,7 @@ export default async function DashboardPage({
         />
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <CategoryBarChart
           title="Service performance"
           description={canSeeMoney ? "Revenue by service" : "Pieces by service"}
@@ -332,7 +332,7 @@ export default async function DashboardPage({
         </Card>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-sm">Due soonest</CardTitle>
@@ -386,8 +386,8 @@ export default async function DashboardPage({
             <CardHeader>
               <CardTitle className="text-sm">Branch performance</CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <table className="w-full text-sm">
+            <CardContent className="overflow-x-auto p-0">
+              <table className="w-full min-w-[420px] text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="px-4 py-2.5 text-left">Branch</th>

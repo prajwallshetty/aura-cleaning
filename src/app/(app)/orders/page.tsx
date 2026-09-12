@@ -71,7 +71,12 @@ export default async function OrdersPage({
 
   const where: Prisma.OrderWhereInput = {
     ...(branchId ? { branchId } : {}),
-    ...(status && status !== "all" ? { status: status as OrderStatus } : {}),
+    // "active" is the counter's word for everything still on the floor.
+    ...(status === "active"
+      ? { status: { notIn: ["DELIVERED", "CANCELLED", "REFUNDED"] as OrderStatus[] } }
+      : status && status !== "all"
+        ? { status: status as OrderStatus }
+        : {}),
     ...(paymentStatus && paymentStatus !== "all"
       ? { paymentStatus: paymentStatus as never }
       : {}),
@@ -275,7 +280,7 @@ export default async function OrdersPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label="Orders matched" value={total} icon={ClipboardList} />
         {canSeeMoney ? (
           <>
@@ -300,7 +305,10 @@ export default async function OrdersPage({
           {
             name: "status",
             label: "Status",
-            options: enumOptions(ORDER_STATUSES, ORDER_STATUS_LABELS),
+            options: [
+              { value: "active", label: "Still in progress" },
+              ...enumOptions(ORDER_STATUSES, ORDER_STATUS_LABELS),
+            ],
           },
           {
             name: "payment",

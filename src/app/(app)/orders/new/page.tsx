@@ -8,13 +8,18 @@ import { OrderForm } from "@/app/(app)/orders/new/order-form";
 import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { PERMISSIONS } from "@/lib/rbac";
-import { hasPermission, requirePermission } from "@/lib/session";
+import { assertBranchAccess, hasPermission, requirePermission } from "@/lib/session";
 import { isGlobalRole } from "@/lib/rbac";
 
 export const metadata = { title: "New order" };
 
-export default async function NewOrderPage() {
+export default async function NewOrderPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>;
+}) {
   const user = await requirePermission(PERMISSIONS.ORDER_CREATE);
+  const { customer: customerId } = await searchParams;
 
   const [services, garmentTypes, branches, b2bAccounts, gstSetting] = await Promise.all([
     prisma.service.findMany({
@@ -49,6 +54,28 @@ export default async function NewOrderPage() {
     prisma.setting.findUnique({ where: { key: "gst_rate" } }),
   ]);
 
+  // Arriving from a customer profile pre-fills the booking with their details.
+  const initialCustomer = customerId
+    ? await prisma.customer.findUnique({
+        where: { id: customerId },
+        select: {
+          id: true,
+          branchId: true,
+          name: true,
+          phone: true,
+          email: true,
+          addressLine: true,
+          city: true,
+          pincode: true,
+          landmark: true,
+          orderCount: true,
+          outstandingAmount: true,
+        },
+      })
+    : null;
+
+  if (initialCustomer) assertBranchAccess(user, initialCustomer.branchId);
+
   if (services.length === 0 || garmentTypes.length === 0) {
     return (
       <div className="space-y-5">
@@ -81,6 +108,14 @@ export default async function NewOrderPage() {
       />
 
       <OrderForm
+        initialCustomer={
+          initialCustomer
+            ? {
+                ...initialCustomer,
+                outstandingAmount: num(initialCustomer.outstandingAmount),
+              }
+            : null
+        }
         services={services.map((service) => ({
           ...service,
           basePrice: num(service.basePrice),
@@ -88,7 +123,7 @@ export default async function NewOrderPage() {
         garmentTypes={garmentTypes}
         branches={branches}
         b2bAccounts={b2bAccounts}
-        defaultBranchId={user.branchId ?? branches[0]?.id ?? null}
+        defaultBranchId={initialCustomer?.branchId ?? user.branchId ?? branches[0]?.id ?? null}
         canDiscount={hasPermission(user, PERMISSIONS.ORDER_APPLY_DISCOUNT)}
         defaultGstRate={Number(gstSetting?.value ?? 18)}
       />

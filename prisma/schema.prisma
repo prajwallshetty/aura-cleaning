@@ -307,8 +307,7 @@ enum ComplaintResolution {
 }
 
 enum NotificationChannel {
-  WHATSAPP
-  SMS
+  IN_APP
   EMAIL
 }
 

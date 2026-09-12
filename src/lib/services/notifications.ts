@@ -59,7 +59,7 @@ export async function notify(input: NotifyInput): Promise<void> {
             subject: template.subject,
             body: renderTemplate(template.body, variables),
           }))
-        : (input.channels ?? ["WHATSAPP"]).map((channel) => ({
+        : (input.channels ?? ["IN_APP"]).map((channel) => ({
             templateId: null,
             channel,
             subject: null as string | null,

@@ -39,7 +39,20 @@ export interface StationLoad {
   trend: "up" | "down";
 }
 
+/** The eight figures the counter reads first thing every morning. */
+export interface OverviewMetrics {
+  totalOrders: number;
+  todayOrders: number;
+  pendingOrders: number;
+  washingOrders: number;
+  readyOrders: number;
+  deliveredOrders: number;
+  todayRevenue: number;
+  pendingPayments: number;
+}
+
 export interface OverviewData {
+  metrics: OverviewMetrics;
   business: {
     name: string;
     ownerName: string;
@@ -116,6 +129,10 @@ export async function getOverviewData(user: SessionUser): Promise<OverviewData> 
     pickups,
     deliveries,
     deliveredWindow,
+    statusCounts,
+    todayOrders,
+    todayRevenue,
+    pendingPayments,
   ] = await Promise.all([
     user.branchId
       ? prisma.branch.findUnique({
@@ -193,7 +210,49 @@ export async function getOverviewData(user: SessionUser): Promise<OverviewData> 
       where: { ...branchFilter, status: "DELIVERED", deliveredAt: { gte: thirtyDaysAgo } },
       select: { scheduledAt: true, deliveredAt: true },
     }),
+    prisma.order.groupBy({
+      by: ["status"],
+      where: branchFilter,
+      _count: { _all: true },
+    }),
+    prisma.order.count({
+      where: { ...branchFilter, placedAt: { gte: today.from, lte: today.to } },
+    }),
+    prisma.payment.aggregate({
+      where: {
+        ...branchFilter,
+        state: "CAPTURED",
+        paidAt: { gte: today.from, lte: today.to },
+      },
+      _sum: { amount: true },
+    }),
+    prisma.order.aggregate({
+      where: {
+        ...branchFilter,
+        status: { notIn: ["CANCELLED", "REFUNDED"] },
+        outstandingAmount: { gt: 0 },
+      },
+      _sum: { outstandingAmount: true },
+    }),
   ]);
+
+  const countByStatus = new Map(statusCounts.map((row) => [row.status, row._count._all]));
+  const countOf = (...statuses: string[]) =>
+    statuses.reduce((sum, status) => sum + (countByStatus.get(status as never) ?? 0), 0);
+
+  const metrics: OverviewMetrics = {
+    totalOrders: [...countByStatus.values()].reduce((sum, count) => sum + count, 0),
+    todayOrders,
+    // "Pending" is everything still on the floor — booked but not handed back.
+    pendingOrders: [...countByStatus.entries()]
+      .filter(([status]) => !["DELIVERED", "CANCELLED", "REFUNDED"].includes(status))
+      .reduce((sum, [, count]) => sum + count, 0),
+    washingOrders: countOf("WASHING"),
+    readyOrders: countOf("READY"),
+    deliveredOrders: countOf("DELIVERED"),
+    todayRevenue: round2(num(todayRevenue._sum.amount)),
+    pendingPayments: round2(num(pendingPayments._sum.outstandingAmount)),
+  };
 
   // --- Priority orders -----------------------------------------------------
   const urgentTotal = urgentOrders.length;
@@ -307,6 +366,7 @@ export async function getOverviewData(user: SessionUser): Promise<OverviewData> 
   ).length;
 
   return {
+    metrics,
     business: {
       name: branch?.name ?? "Aura Laundry",
       ownerName: user.name,

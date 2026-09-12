@@ -99,7 +99,7 @@ export function NewStaffDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Full name" required error={fieldErrors.name}>
             <Input value={form.name} onChange={(e) => set({ name: e.target.value })} />
           </FormField>

@@ -166,7 +166,7 @@ export default async function ReportsPage({
 
         {canSales ? (
           <TabsContent value="sales" className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <StatCard
                 label="Revenue"
                 value={formatCurrency(
@@ -209,8 +209,8 @@ export default async function ReportsPage({
                 <CardHeader>
                   <CardTitle className="text-sm">Sales by branch</CardTitle>
                 </CardHeader>
-                <CardContent className="p-0">
-                  <table className="w-full text-sm">
+                <CardContent className="overflow-x-auto p-0">
+                  <table className="w-full min-w-[420px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="px-4 py-2.5 text-left">Branch</th>
@@ -247,7 +247,7 @@ export default async function ReportsPage({
 
         {canOps && operations ? (
           <TabsContent value="operations" className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Orders received" value={operations.ordersReceived} />
               <StatCard
                 label="Completed"
@@ -286,7 +286,7 @@ export default async function ReportsPage({
 
         {canOps && delivery ? (
           <TabsContent value="delivery" className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard label="Scheduled" value={delivery.scheduled} />
               <StatCard label="Delivered" value={delivery.delivered} tone="success" />
               <StatCard
@@ -332,7 +332,7 @@ export default async function ReportsPage({
 
         {canInventory ? (
           <TabsContent value="inventory" className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <StatCard
                 label="Items below minimum"
                 value={lowStock.length}
@@ -360,13 +360,13 @@ export default async function ReportsPage({
               <CardHeader>
                 <CardTitle className="text-sm">Low stock</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="overflow-x-auto p-0">
                 {lowStock.length === 0 ? (
                   <p className="p-6 text-center text-sm text-muted-foreground">
                     Every item is above its reorder level.
                   </p>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[420px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="px-4 py-2.5 text-left">Item</th>
@@ -408,13 +408,13 @@ export default async function ReportsPage({
               <CardHeader>
                 <CardTitle className="text-sm">Purchase history</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
+              <CardContent className="overflow-x-auto p-0">
                 {purchaseHistory.length === 0 ? (
                   <p className="p-6 text-center text-sm text-muted-foreground">
                     No purchase orders in this period.
                   </p>
                 ) : (
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[420px] text-sm">
                     <thead>
                       <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
                         <th className="px-4 py-2.5 text-left">PO</th>
@@ -457,7 +457,7 @@ export default async function ReportsPage({
 
         {canFinance && finance ? (
           <TabsContent value="finance" className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatCard
                 label="Revenue"
                 value={formatCurrency(finance.revenue)}

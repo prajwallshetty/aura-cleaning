@@ -74,7 +74,7 @@ export default async function RacksPage({
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Racks" value={racks.length} icon={Warehouse} />
         <StatCard label="Slots" value={totalSlots} />
         <StatCard label="Garments racked" value={racked} tone="success" />

@@ -117,7 +117,7 @@ export function BranchDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Code" required error={fieldErrors.code}>
             <Input
               value={form.code}
@@ -299,7 +299,7 @@ export function ServiceDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Code" required error={fieldErrors.code}>
             <Input
               value={form.code}
@@ -456,7 +456,7 @@ export function GarmentTypeDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Code" required>
             <Input
               value={form.code}
@@ -572,7 +572,7 @@ export function TemplateDialog({
   const [form, setForm] = useState({
     code: template?.code ?? "",
     name: template?.name ?? "",
-    channel: template?.channel ?? "WHATSAPP",
+    channel: template?.channel ?? "IN_APP",
     event: template?.event ?? "ORDER_RECEIVED",
     subject: template?.subject ?? "",
     body: template?.body ?? "",
@@ -606,7 +606,7 @@ export function TemplateDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Code" required hint="Lowercase, underscores only">
             <Input
               value={form.code}
@@ -623,8 +623,7 @@ export function TemplateDialog({
             <Select value={form.channel} onValueChange={(channel) => set({ channel })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="WHATSAPP">WhatsApp</SelectItem>
-                <SelectItem value="SMS">SMS</SelectItem>
+                <SelectItem value="IN_APP">In-app notice</SelectItem>
                 <SelectItem value="EMAIL">Email</SelectItem>
               </SelectContent>
             </Select>
@@ -758,7 +757,7 @@ export function GeneralSettingsForm({
     >
       {error ? <FormError message={error} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <FormField label="Business name">
           <Input
             value={form.appName}
@@ -843,7 +842,7 @@ export function ExpenseDialog({
 
         {error ? <FormError message={error} /> : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormField label="Category">
             <Select value={form.category} onValueChange={(category) => set({ category })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
