@@ -36,6 +36,8 @@ export function parseScan(raw: string): ParsedScan {
     return { kind: "unknown", value: upper };
   }
 
+  // TR-1042 and friends, plus the legacy G1001 form.
+  if (/^[A-Z]{2}-\d+$/.test(upper)) return { kind: "garment", value: upper };
   if (/^G\d+$/.test(upper)) return { kind: "garment", value: upper };
   if (/^ORD\d+$/.test(upper)) return { kind: "order", value: upper };
   if (/^[A-Z]\d{2}$/.test(upper)) return { kind: "slot", value: upper };

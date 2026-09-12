@@ -40,7 +40,7 @@ export async function createOrder(
     }),
     prisma.garmentType.findMany({
       where: { id: { in: [...new Set(input.items.map((i) => i.garmentTypeId))] } },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, name: true, isActive: true, trackingCategory: true },
     }),
   ]);
 
@@ -200,6 +200,8 @@ export async function createOrder(
           seeds.push({
             orderItemId: orderItem.id,
             garmentTypeId: orderItem.garmentTypeId,
+            trackingCategory:
+              garmentTypeById.get(orderItem.garmentTypeId)?.trackingCategory ?? "OTHER",
             serviceId: orderItem.serviceId,
             serviceStages: service.stages,
             stainNotes: source.notes ?? input.stainNotes ?? null,

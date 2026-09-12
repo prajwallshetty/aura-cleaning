@@ -18,6 +18,7 @@ import {
 } from "@/lib/action-result";
 import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import { parseScan } from "@/lib/codes";
+import { categoryLabel } from "@/lib/garment-categories";
 import { advanceGarment, advanceMany } from "@/lib/services/processing";
 import { moveGarmentToSlot, recomputeOrderStatus } from "@/lib/services/garments";
 import {
@@ -162,7 +163,14 @@ export async function lookupCodeAction(
 
 export async function advanceGarmentAction(
   payload: unknown,
-): Promise<ActionResult<{ garmentCode: string; status: string; nextStage: string | null }>> {
+): Promise<
+  ActionResult<{
+    garmentCode: string;
+    status: string;
+    nextStage: string | null;
+    mismatchAlert: string | null;
+  }>
+> {
   return runAction(async () => {
     const input = advanceStageSchema.parse(payload);
     const required = STAGE_PERMISSION[input.stage] ?? PERMISSIONS.PROCESSING_VIEW;
@@ -179,6 +187,7 @@ export async function advanceGarmentAction(
       note: input.note ?? null,
       scannedVia: input.scannedVia ?? "manual",
       rackSlotId: input.rackSlotId ?? null,
+      contextOrderId: input.contextOrderId ?? null,
       actor: { userId: user.id, userName: user.name, branchId: user.branchId },
     });
 
@@ -196,10 +205,15 @@ export async function advanceGarmentAction(
     revalidatePath(`/garments/${result.garmentCode}`);
     revalidatePath("/dashboard");
 
+    if (result.mismatchAlert) {
+      revalidatePath("/mismatch");
+    }
+
     return {
       garmentCode: result.garmentCode,
       status: result.status,
       nextStage: result.nextStage,
+      mismatchAlert: result.mismatchAlert,
     };
   });
 }
@@ -520,7 +534,18 @@ export async function uploadGarmentPhotoAction(
 export async function scanForStageAction(
   code: string,
   stage: string,
-): Promise<ActionResult<{ id: string; garmentCode: string; orderNumber: string; typeName: string; taskStatus: string }>> {
+  contextOrderNumber?: string | null,
+): Promise<
+  ActionResult<{
+    id: string;
+    garmentCode: string;
+    orderNumber: string;
+    typeName: string;
+    categoryLabel: string;
+    taskStatus: string;
+    mismatchAlert: string | null;
+  }>
+> {
   return runAction(async () => {
     const required = STAGE_PERMISSION[stage] ?? PERMISSIONS.PROCESSING_VIEW;
     const user = await authorize(required);
@@ -554,12 +579,36 @@ export async function scanForStageAction(
       );
     }
 
+    // The operator finds out now, while the piece is still in their hand.
+    let mismatchAlert: string | null = null;
+    if (
+      contextOrderNumber &&
+      contextOrderNumber.toUpperCase() !== garment.order.orderNumber.toUpperCase()
+    ) {
+      mismatchAlert = `${garment.garmentCode} belongs to ${garment.order.orderNumber}, not ${contextOrderNumber.toUpperCase()}.`;
+    } else {
+      const alreadyHere = await prisma.garmentScan.findFirst({
+        where: {
+          garmentId: garment.id,
+          stage: stage as never,
+          outcome: "MATCH",
+          scannedAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+        },
+        select: { id: true },
+      });
+      if (alreadyHere) {
+        mismatchAlert = `${garment.garmentCode} was already scanned into this station a moment ago.`;
+      }
+    }
+
     return {
       id: garment.id,
       garmentCode: garment.garmentCode,
       orderNumber: garment.order.orderNumber,
       typeName: garment.garmentType.name,
+      categoryLabel: categoryLabel(garment.trackingCategory),
       taskStatus: task.status,
+      mismatchAlert,
     };
   });
 }

@@ -10,6 +10,11 @@ import { Barcode, QrCode } from "@/components/shared/code-image";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Timeline, type TimelineEntry } from "@/components/shared/timeline";
+import {
+  categoryLabel,
+  categoryMeta,
+  categorySlug,
+} from "@/lib/garment-categories";
 import { GarmentTools } from "@/app/(app)/garments/[code]/garment-tools";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime, formatTime } from "@/lib/dates";
@@ -53,6 +58,17 @@ export default async function GarmentDetailPage({
       },
       lastScannedBy: { select: { name: true } },
       statusHistory: { orderBy: { createdAt: "asc" } },
+      scans: {
+        orderBy: { scannedAt: "asc" },
+        include: {
+          scannedBy: { select: { name: true } },
+          contextOrder: { select: { orderNumber: true } },
+        },
+      },
+      exceptions: {
+        orderBy: { reportedAt: "desc" },
+        include: { reportedBy: { select: { name: true } } },
+      },
       locationHistory: {
         orderBy: { createdAt: "asc" },
         include: {
@@ -89,6 +105,32 @@ export default async function GarmentDetailPage({
         : ["READY", "PACKED", "DELIVERED", "QC_PASSED"].includes(entry.toStatus)
           ? "success"
           : "default",
+  }));
+
+  // The one-line answer to "where has this been?" — the stations it passed
+  // through, in order, with the time it cleared each one.
+  const journey = (() => {
+    const seen = new Map<string, Date>();
+    for (const entry of garment.statusHistory) {
+      if (!seen.has(entry.stage)) seen.set(entry.stage, entry.createdAt);
+    }
+    return [...seen.entries()].map(([stage, at]) => ({
+      stage,
+      label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? stage,
+      at,
+    }));
+  })();
+
+  const scanTimeline: TimelineEntry[] = garment.scans.map((scan) => ({
+    id: scan.id,
+    time: formatTime(scan.scannedAt),
+    title: `${STAGE_LABELS[scan.stage]}${scan.outcome === "MATCH" ? "" : ` — ${scan.outcome.replace(/_/g, " ").toLowerCase()}`}`,
+    description:
+      scan.outcome === "WRONG_ORDER"
+        ? `Scanned under ${scan.contextOrder?.orderNumber ?? "another order"}`
+        : (scan.note ?? scan.location),
+    meta: `${scan.scannedBy?.name ?? "System"} · ${formatDateTime(scan.scannedAt)}`,
+    tone: scan.outcome === "MATCH" ? "success" : "danger",
   }));
 
   const locationTimeline: TimelineEntry[] = garment.locationHistory.map((entry) => ({
@@ -144,6 +186,13 @@ export default async function GarmentDetailPage({
             label={STAGE_LABELS[garment.currentStage]}
             tone="neutral"
           />
+          <Link href={`/tracking/${categorySlug(garment.trackingCategory)}`}>
+            <StatusBadge
+              status={garment.trackingCategory}
+              tone="info"
+              label={`${categoryMeta(garment.trackingCategory).emoji} ${categoryLabel(garment.trackingCategory)}`}
+            />
+          </Link>
           {garment.rewashCount > 0 ? (
             <StatusBadge
               status="REWASH"
@@ -189,12 +238,57 @@ export default async function GarmentDetailPage({
                   ? `Last scanned ${formatDateTime(garment.lastScannedAt)}${garment.lastScannedBy ? ` by ${garment.lastScannedBy.name}` : ""}`
                   : "Not scanned since intake"}
               </p>
+
+              {journey.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-sm">
+                  {journey.map((step, index) => (
+                    <span key={step.stage} className="flex items-center gap-1.5">
+                      {index > 0 ? (
+                        <span className="text-muted-foreground" aria-hidden>
+                          →
+                        </span>
+                      ) : null}
+                      <span className="rounded-md bg-muted px-2 py-0.5">
+                        {step.label}{" "}
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {formatTime(step.at)}
+                        </span>
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </CardContent>
           </Card>
+
+          {garment.exceptions.some((entry) => entry.status === "OPEN") ? (
+            <Card className="border-destructive/50 bg-destructive/5">
+              <CardHeader>
+                <CardTitle className="text-sm">Open issues</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {garment.exceptions
+                  .filter((entry) => entry.status === "OPEN")
+                  .map((entry) => (
+                    <p key={entry.id}>
+                      <span className="font-medium">
+                        {entry.type.replace(/_/g, " ").toLowerCase()}
+                      </span>
+                      {entry.detail ? ` — ${entry.detail}` : ""}
+                      <span className="block text-xs text-muted-foreground">
+                        {entry.reportedBy?.name ?? "System"} ·{" "}
+                        {formatDateTime(entry.reportedAt)}
+                      </span>
+                    </p>
+                  ))}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Tabs defaultValue="history">
             <TabsList>
               <TabsTrigger value="history">History</TabsTrigger>
+              <TabsTrigger value="scans">Scans ({garment.scans.length})</TabsTrigger>
               <TabsTrigger value="stages">Stages</TabsTrigger>
               <TabsTrigger value="location">Movement</TabsTrigger>
               <TabsTrigger value="photos">Photos ({garment.photos.length})</TabsTrigger>
@@ -209,6 +303,23 @@ export default async function GarmentDetailPage({
                 </CardHeader>
                 <CardContent>
                   <Timeline entries={statusTimeline} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="scans">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Every scan of this tag</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {scanTimeline.length > 0 ? (
+                    <Timeline entries={scanTimeline} />
+                  ) : (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      This tag has never been scanned.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

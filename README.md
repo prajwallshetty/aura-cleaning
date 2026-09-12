@@ -150,10 +150,37 @@ default pipeline.
 With first-class support for partial delivery, cancellation, refund, rewash, rework
 and failed delivery.
 
+### The garment is the unit, not the order
+
+An order is a billing envelope. The thing the shop physically handles is a single
+piece, so that is the smallest thing the system tracks: an order of three
+trousers, two shirts and a jacket is six `Garment` rows, six ids, six tags and
+six independent histories, all pointing at one order number.
+
+Each piece belongs to exactly one **tracking category** — trousers, shirts,
+t-shirts, jackets, dresses, sarees, bedsheets or other — which decides the prefix
+on its id and the tile it counts towards on the dashboard. Every category counts
+on its own sequence, so `TR-1042` and `SH-1042` are different garments and an
+operator knows what they are holding before they have read the number.
+
+### Mismatch detection
+
+Every station move writes a `GarmentScan`: which piece, which order, which
+category, which station, when, and by whom. The mismatch engine reads those
+against what each order says it holds and reports every way the two disagree —
+🔴 missing, 🔴 wrong garment, 🔴 wrong order, 🔴 duplicate scan, 🟠 wrong rack,
+🟠 never scanned, 🟢 correct.
+
+Findings are derived on every read rather than stored, so a problem that has been
+put right stops appearing by itself. The exception is a problem a person raised —
+a garment reported missing — which lives in `GarmentException` until someone
+closes it.
+
 ### How a garment moves
 
 1. **Intake.** Booking an order creates one `Garment` per physical piece, each with a
-   unique code (`G1001`), a QR payload and a CODE128 barcode. It also creates that
+   unique category-prefixed id (`TR-1042` — the forty-second pair of trousers this
+   branch has taken in), a QR payload and a CODE128 barcode. It also creates that
    garment's `ProcessingTask` pipeline, derived from the stages configured on its
    service — a steam-iron order never queues at the washing station.
 2. **Stations.** Each workstation shows only the garments it can actually action:
@@ -183,11 +210,12 @@ customer's orders, spend and outstanding balance whenever either changes. The or
 still carries its own snapshot of the customer's name, phone and address, so editing
 a directory entry never rewrites an invoice that has already been issued.
 
-Three tables are append-only by contract:
+Four tables are append-only by contract:
 
 - `GarmentStatusHistory` — every status change a garment has ever had
 - `GarmentLocationHistory` — every physical move
-- `ScanEvent` — every tag scan, successful or not, and what was done next
+- `GarmentScan` — every read of a garment tag at a station, and how it classified
+- `ScanEvent` — every counter tag scan, successful or not, and what was done next
 
 ---
 
@@ -197,10 +225,12 @@ Three tables are append-only by contract:
 |---|---|---|
 | Dashboard | `/dashboard` | Live operational counters, revenue and volume charts, station queue depth, branch performance. Filter by date, branch, service and status. |
 | Orders | `/orders` | Booking with a customer directory lookup, live server-side pricing, GST, advances, invoice generation, lifecycle transitions, cancel/refund/rewash. |
+| Categories | `/tracking` | Live piece count per category — trousers, shirts, t-shirts, jackets, dresses, sarees, bedsheets, other. Open one for every piece of that kind in the building with its order, customer, description, location, expected delivery, tag state and scan state. |
+| Mismatch Center | `/mismatch` | Expected vs scanned vs actual, per category. Missing, wrong garment, wrong order, duplicate scan, wrong rack and never-scanned, each with the garment, customer, order, expected location, last scan and who made it — and Scan again, Move garment, Correct order, Report missing and View order to act on it. |
 | Scan tag | `/scan` | The counter's scanner. Camera, QR, barcode or a USB/Bluetooth gun; resolves an order or garment tag to the order, with one-tap status changes, payment, tag reprint and a persistent scan history. Rescanning a tag reopens the order it already found. |
 | Print tags | `/tags`, `/orders/:id/tags` | Thermal tag studio at 58 mm, 80 mm or a custom 40–120 mm width. Order tag, per-garment tags or both; print, reprint, print all, and a print preview. Prints are counted and audited. A separate GST receipt prints at `/orders/:id/receipt`. |
 | Customers | `/customers` | Directory searchable by name, phone, customer code or an order number they placed. Order history, lifetime spend, balance owed, repeat indicator, and one-click booking from the profile. |
-| Garments | `/garments` | Per-garment record, immutable ledger, stage timings, movement history, photos, printable tag. |
+| Garments | `/garments` | Per-garment record, immutable ledger, stage timings, movement history, every scan of the tag, photos, printable tag. |
 | Garment lookup | `/garments/scan` | Camera or hardware-scanner lookup answering "where is this piece?" with its full history. |
 | Processing | `/processing` | One screen per station, scanner-first, large targets, bulk actions, QC failure routing. |
 | Rack & location | `/racks` | Branch → rack → slot map with capacity and occupancy; click any slot to see what is in it. |

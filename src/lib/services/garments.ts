@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { buildBarcodeValue, buildQrPayload } from "@/lib/codes";
 import { nextGarmentCodeBlock } from "@/lib/sequence";
+import { categoryPrefix } from "@/lib/garment-categories";
 import { buildPipeline, garmentStatusFor, STAGE_ORDER } from "@/lib/workflow";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
@@ -9,6 +10,7 @@ import type {
   OrderStatus,
   ProcessingStage,
   TaskStatus,
+  TrackingCategory,
 } from "@/generated/prisma/enums";
 
 type Tx = Prisma.TransactionClient;
@@ -16,6 +18,7 @@ type Tx = Prisma.TransactionClient;
 export interface GarmentSeed {
   orderItemId: string;
   garmentTypeId: string;
+  trackingCategory: TrackingCategory;
   serviceId: string;
   serviceStages: ProcessingStage[];
   color?: string | null;
@@ -48,11 +51,22 @@ export async function createGarments(
   const { seeds } = params;
   if (seeds.length === 0) return [];
 
-  const codes = await nextGarmentCodeBlock(seeds.length, tx);
+  // Codes are allocated per category so the prefix on a tag always matches the
+  // garment: one block per category rather than one per piece.
+  const perCategory = new Map<TrackingCategory, number>();
+  for (const seed of seeds) {
+    perCategory.set(seed.trackingCategory, (perCategory.get(seed.trackingCategory) ?? 0) + 1);
+  }
+
+  const pools = new Map<TrackingCategory, string[]>();
+  for (const [category, count] of perCategory) {
+    pools.set(category, await nextGarmentCodeBlock(categoryPrefix(category), count, tx));
+  }
+
   const createdIds: string[] = [];
 
-  for (const [index, seed] of seeds.entries()) {
-    const code = codes[index];
+  for (const seed of seeds) {
+    const code = pools.get(seed.trackingCategory)!.shift()!;
     const pipeline = buildPipeline(seed.serviceStages);
 
     const garment = await tx.garment.create({
@@ -63,6 +77,7 @@ export async function createGarments(
         orderId: params.orderId,
         orderItemId: seed.orderItemId,
         garmentTypeId: seed.garmentTypeId,
+        trackingCategory: seed.trackingCategory,
         serviceId: seed.serviceId,
         branchId: params.branchId,
         status: "RECEIVED",

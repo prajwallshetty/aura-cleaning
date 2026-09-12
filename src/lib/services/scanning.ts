@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { parseScan } from "@/lib/codes";
 import { ORDER_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
+import { categoryMeta } from "@/lib/garment-categories";
+import {
+  MISMATCH_LABELS,
+  detectMismatches,
+  type MismatchKind,
+} from "@/lib/services/garment-tracking";
 import type { ScanSource, ScanTargetKind } from "@/generated/prisma/enums";
 
 /** The order card the counter sees after a successful scan. */
@@ -30,11 +36,28 @@ export interface ScannedOrder {
   tagPrintCount: number;
   items: Array<{ id: string; label: string; quantity: number; lineTotal: number }>;
   stageSummary: Array<{ stage: string; label: string; done: number; total: number }>;
+  /** Pieces of each kind on this order, and how many have been scanned here. */
+  categories: Array<{
+    category: string;
+    label: string;
+    emoji: string;
+    expected: number;
+    scanned: number;
+  }>;
+  /** Anything the mismatch engine has to say about this order's pieces. */
+  issues: Array<{
+    garmentId: string;
+    garmentCode: string;
+    kind: MismatchKind;
+    label: string;
+    detail: string;
+  }>;
   /** Set when the code was a garment tag rather than the order tag. */
   scannedGarment: {
     code: string;
     typeName: string;
     serviceName: string;
+    categoryLabel: string;
     status: string;
     slot: string | null;
   } | null;
@@ -45,6 +68,13 @@ export interface ScanOutcome {
   kind: ScanTargetKind;
   message: string;
   order: ScannedOrder | null;
+  /** Set when a garment was read against an order it does not belong to. */
+  wrongOrder?: {
+    garmentId: string;
+    garmentCode: string;
+    belongsToOrderId: string;
+    belongsToOrderNumber: string;
+  };
 }
 
 const CLOSED = new Set(["DELIVERED", "CANCELLED", "REFUNDED"]);
@@ -66,12 +96,18 @@ async function loadOrder(
       },
       garments: {
         select: {
+          id: true,
           garmentCode: true,
           status: true,
+          currentStage: true,
+          trackingCategory: true,
           garmentType: { select: { name: true } },
           service: { select: { name: true } },
           rackSlot: { select: { code: true, rack: { select: { code: true } } } },
           tasks: { select: { stage: true, status: true } },
+          scans: {
+            select: { stage: true, outcome: true },
+          },
         },
       },
     },
@@ -93,6 +129,25 @@ async function loadOrder(
   const scanned = scannedGarmentCode
     ? order.garments.find((garment) => garment.garmentCode === scannedGarmentCode)
     : undefined;
+
+  // Expected vs actually-scanned, per category — the count an operator does by
+  // hand when they open a bundle.
+  const byCategory = new Map<string, { expected: number; scanned: number }>();
+  for (const garment of order.garments) {
+    const entry = byCategory.get(garment.trackingCategory) ?? { expected: 0, scanned: 0 };
+    entry.expected += 1;
+    if (
+      garment.scans.some(
+        (scan) => scan.stage === garment.currentStage && scan.outcome === "MATCH",
+      )
+    ) {
+      entry.scanned += 1;
+    }
+    byCategory.set(garment.trackingCategory, entry);
+  }
+
+  const findings = await detectMismatches({ branchIds: [order.branchId] });
+  const orderGarmentIds = new Set(order.garments.map((garment) => garment.id));
 
   return {
     id: order.id,
@@ -131,11 +186,31 @@ async function loadOrder(
         ...counts,
       }))
       .sort((a, b) => a.stage.localeCompare(b.stage)),
+    categories: [...byCategory.entries()].map(([category, counts]) => {
+      const meta = categoryMeta(category as never);
+      return {
+        category,
+        label: meta.label,
+        emoji: meta.emoji,
+        expected: counts.expected,
+        scanned: counts.scanned,
+      };
+    }),
+    issues: findings
+      .filter((finding) => orderGarmentIds.has(finding.garmentId))
+      .map((finding) => ({
+        garmentId: finding.garmentId,
+        garmentCode: finding.garmentCode,
+        kind: finding.kind,
+        label: MISMATCH_LABELS[finding.kind],
+        detail: finding.detail,
+      })),
     scannedGarment: scanned
       ? {
           code: scanned.garmentCode,
           typeName: scanned.garmentType.name,
           serviceName: scanned.service.name,
+          categoryLabel: categoryMeta(scanned.trackingCategory).label,
           status: scanned.status,
           slot: scanned.rackSlot
             ? `${scanned.rackSlot.rack.code}-${scanned.rackSlot.code}`
@@ -153,7 +228,10 @@ async function loadOrder(
  * that is already there rather than starting anything new, which is what keeps
  * a jumpy scanner from creating duplicates.
  */
-export async function resolveScan(rawCode: string): Promise<ScanOutcome> {
+export async function resolveScan(
+  rawCode: string,
+  contextOrderId?: string | null,
+): Promise<ScanOutcome> {
   const code = rawCode.trim();
   if (!code) {
     return { ok: false, kind: "UNKNOWN", message: "Nothing was scanned", order: null };
@@ -191,10 +269,40 @@ export async function resolveScan(rawCode: string): Promise<ScanOutcome> {
           { qrPayload: code },
         ],
       },
-      select: { garmentCode: true, orderId: true },
+      select: {
+        id: true,
+        garmentCode: true,
+        orderId: true,
+        trackingCategory: true,
+        currentStage: true,
+        branchId: true,
+        order: { select: { orderNumber: true } },
+      },
     });
 
     if (garment) {
+      // The counter had an order open and this piece is not on it — the exact
+      // case the mismatch engine exists to catch, so say so rather than
+      // quietly swapping the card for a different order.
+      if (contextOrderId && contextOrderId !== garment.orderId) {
+        const context = await prisma.order.findUnique({
+          where: { id: contextOrderId },
+          select: { orderNumber: true },
+        });
+        return {
+          ok: false,
+          kind: "GARMENT",
+          message: `${garment.garmentCode} belongs to ${garment.order.orderNumber}, not ${context?.orderNumber ?? "the order on screen"}.`,
+          order: null,
+          wrongOrder: {
+            garmentId: garment.id,
+            garmentCode: garment.garmentCode,
+            belongsToOrderId: garment.orderId,
+            belongsToOrderNumber: garment.order.orderNumber,
+          },
+        };
+      }
+
       return {
         ok: true,
         kind: "GARMENT",

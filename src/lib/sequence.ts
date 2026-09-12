@@ -53,28 +53,47 @@ export async function nextOrderNumber(db: Db = prisma): Promise<string> {
   return `ORD${10000 + value}`;
 }
 
-/** G1001 — printed on every garment tag. */
-export async function nextGarmentCode(db: Db = prisma): Promise<string> {
-  const value = await nextSequence(SEQUENCE_KEYS.GARMENT, db);
-  return `G${1000 + value}`;
+/**
+ * TR-1042 — printed on every garment tag. Each tracking category counts on its
+ * own sequence, so the prefix tells an operator what they are holding before
+ * they have read the number.
+ */
+export const garmentSequenceKey = (prefix: string) =>
+  `${SEQUENCE_KEYS.GARMENT}:${prefix.toUpperCase()}`;
+
+export function formatGarmentCode(prefix: string, value: number): string {
+  return `${prefix.toUpperCase()}-${1000 + value}`;
 }
 
-/** Allocates a contiguous block of garment codes in one round trip. */
+export async function nextGarmentCode(
+  prefix: string,
+  db: Db = prisma,
+): Promise<string> {
+  const value = await nextSequence(garmentSequenceKey(prefix), db);
+  return formatGarmentCode(prefix, value);
+}
+
+/**
+ * Allocates a contiguous block of codes for one category in a single round
+ * trip, which is what makes booking a 40-piece order one fast transaction.
+ */
 export async function nextGarmentCodeBlock(
+  prefix: string,
   count: number,
   db: Db = prisma,
 ): Promise<string[]> {
   if (count <= 0) return [];
+  const key = garmentSequenceKey(prefix);
   const rows = await db.$queryRaw<Array<{ value: number }>>`
     INSERT INTO "sequences" ("key", "value", "updatedAt")
-    VALUES (${SEQUENCE_KEYS.GARMENT}, ${count}, NOW())
+    VALUES (${key}, ${count}, NOW())
     ON CONFLICT ("key")
     DO UPDATE SET "value" = "sequences"."value" + ${count}, "updatedAt" = NOW()
     RETURNING "value"
   `;
   const end = rows[0]?.value ?? count;
   const start = end - count + 1;
-  return Array.from({ length: count }, (_, i) => `G${1000 + start + i}`);
+  return Array.from({ length: count }, (_, i) => formatGarmentCode(prefix, start + i));
 }
 
 export async function nextDocumentNumber(

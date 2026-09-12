@@ -59,6 +59,10 @@ export const PERMISSIONS = {
   INVENTORY_TRANSFER: "inventory.transfer",
   INVENTORY_ADJUST: "inventory.adjust",
 
+  // Garment tracking & mismatch detection
+  TRACKING_VIEW: "tracking.view",
+  TRACKING_RESOLVE: "tracking.resolve",
+
   // Customers
   CUSTOMER_VIEW: "customers.view",
   CUSTOMER_MANAGE: "customers.manage",
@@ -133,6 +137,8 @@ const COUNTER_STAFF_PERMISSIONS: PermissionCode[] = [
   P.GARMENT_SCAN,
   P.GARMENT_UPDATE,
   P.GARMENT_PHOTO_UPLOAD,
+  P.TRACKING_VIEW,
+  P.TRACKING_RESOLVE,
   P.CUSTOMER_VIEW,
   P.CUSTOMER_MANAGE,
   P.PROCESSING_VIEW,
@@ -156,6 +162,7 @@ const processingRole = (stage: PermissionCode): PermissionCode[] => [
   P.PROCESSING_VIEW,
   stage,
   P.RACK_VIEW,
+  P.TRACKING_VIEW,
 ];
 
 const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
@@ -164,6 +171,7 @@ const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
   P.DASHBOARD_VIEW_ALL_BRANCHES,
   P.ORDER_VIEW,
   P.GARMENT_VIEW,
+  P.TRACKING_VIEW,
   P.CUSTOMER_VIEW,
   P.BILLING_VIEW,
   P.BILLING_CREATE_INVOICE,
@@ -295,6 +303,8 @@ export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   [P.GARMENT_SCAN]: "Scan garment QR codes and barcodes",
   [P.GARMENT_UPDATE]: "Edit garment details",
   [P.GARMENT_PHOTO_UPLOAD]: "Upload garment photos",
+  [P.TRACKING_VIEW]: "See garment categories, live locations and the mismatch centre",
+  [P.TRACKING_RESOLVE]: "Report missing garments and clear mismatches",
   [P.CUSTOMER_VIEW]: "View the customer directory and order history",
   [P.CUSTOMER_MANAGE]: "Add and edit customer records",
   [P.PROCESSING_VIEW]: "View processing workstations",

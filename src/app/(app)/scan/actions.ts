@@ -31,6 +31,13 @@ import { cuidSchema } from "@/lib/validations/common";
 const scanSchema = z.object({
   code: z.string().trim().min(1, "Scan or type a tag").max(200),
   source: z.enum(["KEYBOARD", "CAMERA", "HARDWARE"]).default("KEYBOARD"),
+  /** The order already on the card, so a stray piece is caught. */
+  contextOrderId: z
+    .string()
+    .trim()
+    .transform((value) => (value === "" ? null : value))
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -51,7 +58,38 @@ export async function scanTagAction(payload: unknown): Promise<ActionResult<Scan
     if (!limit.success) throw new BusinessRuleError("Scanning too fast — slow down a moment");
 
     const input = scanSchema.parse(payload);
-    const outcome = await resolveScan(input.code);
+    const outcome = await resolveScan(input.code, input.contextOrderId ?? null);
+
+    // A piece read against the wrong order goes on the garment ledger, not
+    // only the scan log — that is what puts it in the mismatch centre.
+    if (outcome.wrongOrder && input.contextOrderId) {
+      const garment = await prisma.garment.findUnique({
+        where: { id: outcome.wrongOrder.garmentId },
+        select: { branchId: true, trackingCategory: true, currentStage: true },
+      });
+      if (garment) {
+        try {
+          assertBranchAccess(user, garment.branchId);
+          await prisma.garmentScan.create({
+            data: {
+              garmentId: outcome.wrongOrder.garmentId,
+              orderId: outcome.wrongOrder.belongsToOrderId,
+              contextOrderId: input.contextOrderId,
+              branchId: garment.branchId,
+              trackingCategory: garment.trackingCategory,
+              stage: garment.currentStage,
+              outcome: "WRONG_ORDER",
+              note: "Read against another order at the counter",
+              scannedById: user.id,
+            },
+          });
+          revalidatePath("/mismatch");
+          revalidatePath("/tracking");
+        } catch {
+          // A cross-branch tag is refused below; nothing to log here.
+        }
+      }
+    }
 
     // A tag from another branch resolves, but this user may not open it.
     if (outcome.order) {

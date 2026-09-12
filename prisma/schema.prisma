@@ -430,6 +430,8 @@ model Branch {
   locationHistory       GarmentLocationHistory[]
   customers             Customer[]
   scanEvents            ScanEvent[]
+  garmentScans          GarmentScan[]
+  garmentExceptions     GarmentException[]
 
   @@index([parentId])
   @@index([isActive])
@@ -489,6 +491,9 @@ model User {
   invoicesIssued       Invoice[]                @relation("InvoiceIssuedBy")
   customersCreated     Customer[]               @relation("CustomerCreatedBy")
   scanEvents           ScanEvent[]              @relation("ScanEventScannedBy")
+  garmentScanReads     GarmentScan[]            @relation("GarmentScanBy")
+  exceptionsReported   GarmentException[]       @relation("GarmentExceptionReporter")
+  exceptionsResolved   GarmentException[]       @relation("GarmentExceptionResolver")
 
   @@index([branchId])
   @@index([role])
@@ -749,13 +754,17 @@ model Service {
 }
 
 model GarmentType {
-  id              String   @id @default(cuid())
-  code            String   @unique
-  name            String
-  category        String   @default("GENERAL")
-  defaultWeightKg Decimal? @db.Decimal(8, 3)
-  icon            String?
-  isActive        Boolean  @default(true)
+  id               String           @id @default(cuid())
+  code             String           @unique
+  name             String
+  /// Loose merchandising grouping, kept for the catalogue screens.
+  category         String           @default("GENERAL")
+  /// The tracking bucket the shop floor counts in. Drives the garment id
+  /// prefix, the dashboard tiles and the mismatch centre.
+  trackingCategory TrackingCategory @default(OTHER)
+  defaultWeightKg  Decimal?         @db.Decimal(8, 3)
+  icon             String?
+  isActive         Boolean          @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -766,6 +775,7 @@ model GarmentType {
   rateCards  B2BRateCard[]
 
   @@index([isActive])
+  @@index([trackingCategory])
   @@map("garment_types")
 }
 
@@ -865,6 +875,8 @@ model Order {
   notifications Notification[]
   invoiceLines  InvoiceLine[]
   scanEvents    ScanEvent[]
+  garmentScans  GarmentScan[]
+  contextScans  GarmentScan[]        @relation("GarmentScanContext")
 
   @@index([branchId, status])
   @@index([customerPhone])
@@ -928,14 +940,17 @@ model Garment {
   qrPayload    String @unique
   barcodeValue String @unique
 
-  orderId       String
-  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItemId   String?
-  orderItem     OrderItem?  @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  garmentTypeId String
-  garmentType   GarmentType @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
-  serviceId     String
-  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  orderId          String
+  order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderItemId      String?
+  orderItem        OrderItem?       @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  garmentTypeId    String
+  garmentType      GarmentType      @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
+  /// Copied from the garment type at intake so a later catalogue edit cannot
+  /// move a garment that is already tagged and on the floor.
+  trackingCategory TrackingCategory @default(OTHER)
+  serviceId        String
+  service          Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
 
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
@@ -969,12 +984,15 @@ model Garment {
   tasks           ProcessingTask[]
   photos          GarmentPhoto[]
   complaints      Complaint[]
+  scans           GarmentScan[]
+  exceptions      GarmentException[]
 
   @@index([orderId])
   @@index([branchId, status])
   @@index([currentStage])
   @@index([rackSlotId])
   @@index([garmentTypeId])
+  @@index([branchId, trackingCategory, status])
   @@map("garments")
 }
 
@@ -2033,4 +2051,113 @@ enum ScanSource {
   KEYBOARD
   CAMERA
   HARDWARE
+}
+
+/// The buckets the shop floor actually counts in. One garment belongs to
+/// exactly one, and it decides the prefix on the garment's own id.
+enum TrackingCategory {
+  TROUSERS
+  SHIRTS
+  TSHIRTS
+  JACKETS
+  DRESSES
+  SAREES
+  BEDSHEETS
+  OTHER
+}
+
+/// One row per physical scan of one garment at one station. This is the
+/// evidence the mismatch centre works from: what was scanned, against which
+/// order the operator thought they were working, and what the system made of
+/// it. Append-only.
+model GarmentScan {
+  id        String  @id @default(cuid())
+  garmentId String
+  garment   Garment @relation(fields: [garmentId], references: [id], onDelete: Cascade)
+
+  /// The order the garment actually belongs to.
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  /// The order the operator had open when they scanned, when there was one.
+  /// A difference between this and orderId is a wrong-order scan.
+  contextOrderId String?
+  contextOrder   Order?  @relation("GarmentScanContext", fields: [contextOrderId], references: [id], onDelete: SetNull)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  trackingCategory TrackingCategory
+  stage            ProcessingStage
+  outcome          GarmentScanOutcome @default(MATCH)
+
+  /// Where the garment was physically read, when the station recorded it.
+  location String?
+  note     String?
+
+  scannedById String?
+  scannedBy   User?   @relation("GarmentScanBy", fields: [scannedById], references: [id], onDelete: SetNull)
+
+  scannedAt DateTime @default(now())
+
+  @@index([garmentId, scannedAt])
+  @@index([orderId])
+  @@index([branchId, scannedAt])
+  @@index([branchId, trackingCategory, stage])
+  @@index([outcome])
+  @@map("garment_scans")
+}
+
+enum GarmentScanOutcome {
+  MATCH
+  WRONG_ORDER
+  WRONG_CATEGORY
+  DUPLICATE
+}
+
+/// A problem a person raised or the system escalated, and whether it is still
+/// open. Most mismatches are derived live from scans; this table is for the
+/// ones that need to survive a refresh — a garment reported missing, a
+/// wrong-order scan someone has acknowledged.
+model GarmentException {
+  id        String  @id @default(cuid())
+  garmentId String
+  garment   Garment @relation(fields: [garmentId], references: [id], onDelete: Cascade)
+
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  type   GarmentExceptionType
+  status GarmentExceptionStatus @default(OPEN)
+
+  detail     String?
+  resolution String?
+
+  reportedById String?
+  reportedBy   User?    @relation("GarmentExceptionReporter", fields: [reportedById], references: [id], onDelete: SetNull)
+  reportedAt   DateTime @default(now())
+
+  resolvedById String?
+  resolvedBy   User?     @relation("GarmentExceptionResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt   DateTime?
+
+  @@index([branchId, status])
+  @@index([garmentId, status])
+  @@index([type, status])
+  @@map("garment_exceptions")
+}
+
+enum GarmentExceptionType {
+  MISSING
+  WRONG_ORDER
+  WRONG_GARMENT
+  WRONG_LOCATION
+  DUPLICATE_SCAN
+  NOT_SCANNED
+}
+
+enum GarmentExceptionStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
 }

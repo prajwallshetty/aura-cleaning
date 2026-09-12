@@ -8,7 +8,9 @@ import {
   MessageSquareWarning,
   Package,
   Receipt,
+  Shapes,
   ScanLine,
+  ShieldAlert,
   Settings,
   Shirt,
   ShoppingCart,
@@ -80,6 +82,18 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/garments",
         icon: Shirt,
         permissions: [PERMISSIONS.GARMENT_VIEW, PERMISSIONS.GARMENT_SCAN],
+      },
+      {
+        label: "Categories",
+        href: "/tracking",
+        icon: Shapes,
+        permissions: [PERMISSIONS.TRACKING_VIEW],
+      },
+      {
+        label: "Mismatch Center",
+        href: "/mismatch",
+        icon: ShieldAlert,
+        permissions: [PERMISSIONS.TRACKING_VIEW],
       },
       {
         label: "Processing",

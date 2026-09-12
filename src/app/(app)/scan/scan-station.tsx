@@ -80,6 +80,9 @@ interface Props {
 export function ScanStation({ history: initialHistory, canUpdateStatus, canTakePayment }: Props) {
   const [order, setOrder] = useState<ScannedOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [strayOrder, setStrayOrder] = useState<{ code: string; orderNumber: string } | null>(
+    null,
+  );
   const [history, setHistory] = useState(initialHistory);
   const [historySearch, setHistorySearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
@@ -94,10 +97,14 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
   }, []);
 
   const runScan = useCallback(
-    (code: string, source: "KEYBOARD" | "CAMERA" = "KEYBOARD") =>
+    (
+      code: string,
+      source: "KEYBOARD" | "CAMERA" = "KEYBOARD",
+      contextOrderId?: string | null,
+    ) =>
       new Promise<void>((resolve) => {
         startTransition(async () => {
-          const result = await scanTagAction({ code, source });
+          const result = await scanTagAction({ code, source, contextOrderId });
           if (!result.ok) {
             setError(result.error);
             setOrder(null);
@@ -109,6 +116,14 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
           const outcome = result.data;
           if (!outcome.ok || !outcome.order) {
             setError(outcome.message);
+            setStrayOrder(
+              outcome.wrongOrder
+                ? {
+                    code: outcome.wrongOrder.garmentCode,
+                    orderNumber: outcome.wrongOrder.belongsToOrderNumber,
+                  }
+                : null,
+            );
             setOrder(null);
             toast.error(outcome.message);
           } else {
@@ -117,6 +132,7 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
             const repeat = lastCodeRef.current === code;
             lastCodeRef.current = code;
             setError(null);
+            setStrayOrder(null);
             setOrder(outcome.order);
             toast.success(
               repeat
@@ -130,6 +146,8 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
       }),
     [historySearch, refreshHistory],
   );
+
+
 
   const reload = useCallback(() => {
     if (order) void runScan(order.orderNumber);
@@ -171,7 +189,7 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
           </CardHeader>
           <CardContent className="space-y-3">
             <Scanner
-              onScan={(code) => runScan(code)}
+              onScan={(code) => runScan(code, "KEYBOARD", order?.id ?? null)}
               placeholder="Scan the order tag, or type ORD10001 / G1001"
               debounceMs={700}
             />
@@ -188,11 +206,36 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
             <CardContent className="flex items-start gap-3 pt-6">
               <XCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div className="space-y-2">
-                <p className="font-medium text-destructive">Tag not recognised</p>
+                <p className="font-medium text-destructive">
+                  {strayOrder ? "Wrong order" : "Tag not recognised"}
+                </p>
                 <p className="text-sm text-muted-foreground">{error}</p>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <Button size="sm" variant="outline" onClick={() => setError(null)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setError(null);
+                      setStrayOrder(null);
+                    }}
+                  >
                     <ScanLine /> Scan again
+                  </Button>
+                  {strayOrder ? (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setOrder(null);
+                        setError(null);
+                        void runScan(strayOrder.orderNumber);
+                        setStrayOrder(null);
+                      }}
+                    >
+                      Open {strayOrder.orderNumber}
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link href="/mismatch">Mismatch centre</Link>
                   </Button>
                   <Button size="sm" variant="ghost" asChild>
                     <Link href="/orders">Search orders instead</Link>
@@ -329,8 +372,76 @@ function OrderCard({
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
             Scanned piece{" "}
             <span className="font-mono font-semibold">{order.scannedGarment.code}</span> ·{" "}
-            {order.scannedGarment.typeName} · {order.scannedGarment.serviceName}
+            {order.scannedGarment.categoryLabel} · {order.scannedGarment.typeName} ·{" "}
+            {order.scannedGarment.serviceName}
             {order.scannedGarment.slot ? ` · rack ${order.scannedGarment.slot}` : ""}
+          </div>
+        ) : null}
+
+        {order.issues.length > 0 ? (
+          <div
+            role="alert"
+            className="space-y-1.5 rounded-lg border border-destructive/50 bg-destructive/5 px-3 py-2.5"
+          >
+            <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
+              <AlertTriangle className="size-4" />
+              {order.issues.length} piece{order.issues.length === 1 ? "" : "s"} on this
+              order need attention
+            </p>
+            <ul className="space-y-1 text-sm">
+              {order.issues.map((issue) => (
+                <li key={issue.garmentId} className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/garments/${issue.garmentCode}`}
+                    className="font-mono font-medium text-primary hover:underline"
+                  >
+                    {issue.garmentCode}
+                  </Link>
+                  <Badge tone="danger">{issue.label}</Badge>
+                  <span className="text-muted-foreground">{issue.detail}</span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/mismatch"
+              className="inline-block text-xs font-medium text-primary hover:underline"
+            >
+              Open the mismatch centre →
+            </Link>
+          </div>
+        ) : null}
+
+        {order.categories.length > 0 ? (
+          <div>
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Pieces by category · expected vs scanned here
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {order.categories.map((entry) => {
+                const complete = entry.scanned >= entry.expected;
+                return (
+                  <Link
+                    key={entry.category}
+                    href={`/tracking/${entry.category.toLowerCase()}`}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition hover:bg-accent",
+                      complete ? "border-success/50 bg-success/5" : "border-warning/50 bg-warning/5",
+                    )}
+                  >
+                    <span aria-hidden>{entry.emoji}</span>
+                    <span>{entry.label}</span>
+                    <span className="numeric font-semibold">
+                      {entry.scanned}/{entry.expected}
+                    </span>
+                    {complete ? (
+                      <CheckCircle2 className="size-3.5 text-success" />
+                    ) : (
+                      <AlertTriangle className="size-3.5 text-warning-foreground" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
         ) : null}
 

@@ -17,10 +17,12 @@ import type {
   GarmentStatus,
   OrderStatus,
   ProcessingStage,
+  TrackingCategory,
   UserRole,
 } from "../src/generated/prisma/enums";
 import { PERMISSIONS, PERMISSION_DESCRIPTIONS, ROLE_PERMISSIONS } from "../src/lib/rbac";
 import { DEFAULT_NOTIFICATION_BODIES } from "../src/lib/notification-templates";
+import { categoryForTypeCode, categoryPrefix } from "../src/lib/garment-categories";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is not set");
@@ -103,6 +105,8 @@ async function clearTransactionalData() {
     prisma.payment.deleteMany(),
     prisma.invoiceLine.deleteMany(),
     prisma.invoice.deleteMany(),
+    prisma.garmentException.deleteMany(),
+    prisma.garmentScan.deleteMany(),
     prisma.scanEvent.deleteMany(),
     prisma.orderStatusHistory.deleteMany(),
     prisma.orderItem.deleteMany(),
@@ -544,7 +548,7 @@ async function seedCatalogue() {
     { code: "CURTAIN", name: "Curtain", category: "HOME" },
     { code: "PILLOWCOVER", name: "Pillow Cover", category: "LINEN" },
     { code: "JACKET", name: "Jacket", category: "OUTER_WEAR" },
-  ];
+  ].map((type) => ({ ...type, trackingCategory: categoryForTypeCode(type.code) }));
 
   const createdServices = await Promise.all(
     services.map((service) =>
@@ -561,7 +565,7 @@ async function seedCatalogue() {
       prisma.garmentType.upsert({
         where: { code: type.code },
         create: type,
-        update: {},
+        update: { trackingCategory: type.trackingCategory },
       }),
     ),
   );
@@ -1051,6 +1055,137 @@ async function seedNotificationTemplates() {
   console.log(`  ${templates.length} notification templates`);
 }
 
+interface SeededGarment {
+  id: string;
+  code: string;
+  orderId: string;
+  branchId: string;
+  trackingCategory: TrackingCategory;
+  stage: ProcessingStage;
+  status: GarmentStatus;
+  scannedAt: Date;
+}
+
+/**
+ * Plants the four problems the mismatch centre is built to catch, on real
+ * garments, so the screen has something true to show on a fresh install:
+ * a piece scanned against someone else's order, the same piece scanned twice
+ * at one station, a piece filed on the wrong rack, and a piece reported
+ * missing outright.
+ */
+async function seedGarmentAnomalies(
+  garments: SeededGarment[],
+  counterUserId: string,
+): Promise<number> {
+  const inProgress = garments.filter(
+    (garment) => garment.status !== "DELIVERED" && garment.status !== "LOST",
+  );
+  if (inProgress.length < 12) return 0;
+
+  const taken = new Set<string>();
+  const take = (count: number) => {
+    const chosen: SeededGarment[] = [];
+    while (chosen.length < count) {
+      const candidate = pick(inProgress);
+      if (taken.has(candidate.id)) continue;
+      taken.add(candidate.id);
+      chosen.push(candidate);
+    }
+    return chosen;
+  };
+
+  let planted = 0;
+
+  // 1. Scanned against the wrong order — the classic counter slip.
+  for (const garment of take(4)) {
+    const other = inProgress.find(
+      (candidate) => candidate.orderId !== garment.orderId && !taken.has(candidate.id),
+    );
+    if (!other) continue;
+    await prisma.garmentScan.create({
+      data: {
+        garmentId: garment.id,
+        orderId: garment.orderId,
+        contextOrderId: other.orderId,
+        branchId: garment.branchId,
+        trackingCategory: garment.trackingCategory,
+        stage: garment.stage,
+        outcome: "WRONG_ORDER",
+        note: `Scanned while working another order`,
+        scannedById: counterUserId,
+        scannedAt: hoursFrom(garment.scannedAt, 0.2),
+      },
+    });
+    planted += 1;
+  }
+
+  // 2. The same piece read twice at one station.
+  for (const garment of take(3)) {
+    await prisma.garmentScan.create({
+      data: {
+        garmentId: garment.id,
+        orderId: garment.orderId,
+        contextOrderId: garment.orderId,
+        branchId: garment.branchId,
+        trackingCategory: garment.trackingCategory,
+        stage: garment.stage,
+        outcome: "DUPLICATE",
+        note: "Second read at the same station",
+        scannedById: counterUserId,
+        scannedAt: hoursFrom(garment.scannedAt, 0.05),
+      },
+    });
+    planted += 1;
+  }
+
+  // 3. Filed somewhere its order-mates are not.
+  const strays = take(2);
+  for (const garment of strays) {
+    const elsewhere = await prisma.rackSlot.findFirst({
+      where: { rack: { branchId: garment.branchId } },
+      orderBy: { code: "desc" },
+      select: { id: true, code: true },
+    });
+    if (!elsewhere) continue;
+    await prisma.garment.update({
+      where: { id: garment.id },
+      data: { rackSlotId: elsewhere.id },
+    });
+    await prisma.garmentException.create({
+      data: {
+        garmentId: garment.id,
+        branchId: garment.branchId,
+        type: "WRONG_LOCATION",
+        detail: `Found on ${elsewhere.code}, away from the rest of the order`,
+        reportedById: counterUserId,
+        reportedAt: hoursFrom(garment.scannedAt, 1),
+      },
+    });
+    planted += 1;
+  }
+
+  // 4. Reported missing at the station.
+  for (const garment of take(2)) {
+    await prisma.garment.update({
+      where: { id: garment.id },
+      data: { status: "LOST" },
+    });
+    await prisma.garmentException.create({
+      data: {
+        garmentId: garment.id,
+        branchId: garment.branchId,
+        type: "MISSING",
+        detail: `Not in the bundle at ${garment.stage.toLowerCase()}`,
+        reportedById: counterUserId,
+        reportedAt: hoursFrom(garment.scannedAt, 2),
+      },
+    });
+    planted += 1;
+  }
+
+  return planted;
+}
+
 /** A customer as the order seeder needs it: enough to fill an order's snapshot. */
 interface DirectoryEntry {
   id: string;
@@ -1123,6 +1258,34 @@ async function seedOrders(context: {
 
   let orderCounter = 0;
   let garmentCounter = 0;
+  const categoryCounters = new Map<string, number>();
+
+  // Every completed stage leaves a scan behind, which is what the mismatch
+  // centre reads. A small share are deliberately dropped: garments that moved
+  // without anyone scanning them are exactly the problem the feature exists to
+  // surface, and a demo with none of them proves nothing.
+  const scans: {
+    garmentId: string;
+    orderId: string;
+    contextOrderId: string | null;
+    branchId: string;
+    trackingCategory: TrackingCategory;
+    stage: ProcessingStage;
+    outcome: "MATCH" | "WRONG_ORDER" | "WRONG_CATEGORY" | "DUPLICATE";
+    location: string | null;
+    scannedById: string;
+    scannedAt: Date;
+  }[] = [];
+  const seededGarments: {
+    id: string;
+    code: string;
+    orderId: string;
+    branchId: string;
+    trackingCategory: TrackingCategory;
+    stage: ProcessingStage;
+    status: GarmentStatus;
+    scannedAt: Date;
+  }[] = [];
   let invoiceCounter = 0;
   let paymentCounter = 0;
   let deliveryCounter = 0;
@@ -1457,9 +1620,14 @@ async function seedOrders(context: {
           ? 0
           : Math.max(1, Math.min(target, target - 1));
 
+      const trackingCategory = categoryForTypeCode(line.garmentType.code);
+      const prefix = categoryPrefix(trackingCategory);
+
       for (let piece = 0; piece < item.quantity; piece += 1) {
         garmentCounter += 1;
-        const code = `G${1000 + garmentCounter}`;
+        const categorySeq = (categoryCounters.get(prefix) ?? 0) + 1;
+        categoryCounters.set(prefix, categorySeq);
+        const code = `${prefix}-${1000 + categorySeq}`;
 
         const completed = Math.min(pipeline.length, randomInt(floor, target));
 
@@ -1570,6 +1738,7 @@ async function seedOrders(context: {
             orderId: order.id,
             orderItemId: item.id,
             garmentTypeId: item.garmentTypeId,
+            trackingCategory,
             serviceId: item.serviceId,
             branchId: branch.id,
             status: currentStatus,
@@ -1595,6 +1764,34 @@ async function seedOrders(context: {
             tasks: { create: tasks },
           },
           select: { id: true },
+        });
+
+        for (const entry of history) {
+          // ~5% of movements happen without a scan.
+          if (random() < 0.05) continue;
+          scans.push({
+            garmentId: garment.id,
+            orderId: order.id,
+            contextOrderId: order.id,
+            branchId: branch.id,
+            trackingCategory,
+            stage: entry.stage,
+            outcome: "MATCH",
+            location: entry.stage === "PACKING" && orderSlot ? orderSlot.code : null,
+            scannedById: entry.userId,
+            scannedAt: entry.createdAt,
+          });
+        }
+
+        seededGarments.push({
+          id: garment.id,
+          code,
+          orderId: order.id,
+          branchId: branch.id,
+          trackingCategory,
+          stage: currentStage,
+          status: currentStatus,
+          scannedAt: cursor,
         });
 
         if (rackSlotId) {
@@ -1711,6 +1908,12 @@ async function seedOrders(context: {
     }
   }
 
+  await prisma.garmentScan.createMany({ data: scans });
+
+  // A handful of real problems for the mismatch centre to find. Without these
+  // the screen looks like it works and proves nothing.
+  const anomalies = await seedGarmentAnomalies(seededGarments, counter.id);
+
   // Roll the lifetime figures up the same way the application does, in one
   // pass rather than per order.
   await prisma.$executeRaw`
@@ -1734,7 +1937,9 @@ async function seedOrders(context: {
   // Keep the sequences ahead of everything the seed created.
   const sequences: [string, number][] = [
     ["order", orderCounter],
-    ["garment", garmentCounter],
+    ...[...categoryCounters.entries()].map(
+      ([prefix, value]) => [`garment:${prefix}`, value] as [string, number],
+    ),
     ["invoice", invoiceCounter],
     ["payment", paymentCounter],
     ["delivery", deliveryCounter],
@@ -1754,6 +1959,9 @@ async function seedOrders(context: {
 
   console.log(
     `  ${orderCounter} orders, ${garmentCounter} tracked garments, ${customerCounter} customers`,
+  );
+  console.log(
+    `  ${scans.length} garment scans · ${anomalies} seeded mismatches for the mismatch centre`,
   );
   return createdOrders;
 }

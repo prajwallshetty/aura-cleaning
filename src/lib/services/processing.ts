@@ -12,9 +12,12 @@ import {
   recordGarmentStatus,
   type ActorContext,
 } from "@/lib/services/garments";
+import { recordGarmentScan } from "@/lib/services/garment-tracking";
 import type {
+  GarmentScanOutcome,
   ProcessingStage,
   TaskStatus,
+  TrackingCategory,
 } from "@/generated/prisma/enums";
 
 export interface AdvanceInput {
@@ -26,6 +29,10 @@ export interface AdvanceInput {
   scannedVia?: string | null;
   /** Packing stations can file the garment straight onto a rack slot. */
   rackSlotId?: string | null;
+  /** The order the operator had open, so a wrong-order read is caught here. */
+  contextOrderId?: string | null;
+  /** The bucket the station is working, so a stray category is caught too. */
+  expectedCategory?: TrackingCategory | null;
 }
 
 export interface AdvanceResult {
@@ -35,6 +42,10 @@ export interface AdvanceResult {
   stage: ProcessingStage;
   nextStage: ProcessingStage | null;
   orderStatus: string | null;
+  /** How the scan that moved this garment classified. */
+  scanOutcome: GarmentScanOutcome;
+  /** Set when the scan was anything but clean — show it to the operator. */
+  mismatchAlert: string | null;
 }
 
 /**
@@ -191,6 +202,20 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       slotAssigned = true;
     }
 
+    // Every station move is a scan, and the scan is what the mismatch centre
+    // reads. Recorded before the status change so a wrong-order read is still
+    // on the ledger even though the move itself is allowed to stand.
+    const scan = await recordGarmentScan(tx, {
+      garmentId: garment.id,
+      stage: input.stage,
+      branchId: input.actor.branchId,
+      userId: input.actor.userId,
+      contextOrderId: input.contextOrderId ?? null,
+      expectedCategory: input.expectedCategory ?? null,
+      location: input.scannedVia ?? null,
+      note: input.note ?? null,
+    });
+
     await recordGarmentStatus(tx, {
       garmentId: garment.id,
       fromStatus: garment.status,
@@ -217,6 +242,8 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       stage: effectiveStage,
       nextStage: isTerminalOutcome ? (nextTask?.stage ?? null) : input.stage,
       orderStatus: orderStatus ?? null,
+      scanOutcome: scan.outcome,
+      mismatchAlert: scan.alert,
     };
   });
 }

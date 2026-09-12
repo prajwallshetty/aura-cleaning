@@ -201,6 +201,16 @@ export function OverviewDashboard({
     [needle],
   );
 
+  const categories = useMemo(() => {
+    const live = data.categories.filter((row) => row.onFloor > 0);
+    if (!needle) return live;
+    return live.filter(
+      (row) =>
+        row.label.toLowerCase().includes(needle) ||
+        row.prefix.toLowerCase().includes(needle),
+    );
+  }, [data.categories, needle]);
+
   const tiles = useMemo(
     () =>
       (needle
@@ -262,6 +272,8 @@ export function OverviewDashboard({
             </div>
 
             <MetricStrip tiles={tiles} filtered={Boolean(needle)} />
+
+            <CategoryStrip categories={categories} filtered={Boolean(needle)} />
 
             <PerformanceSection
               points={chartPoints}
@@ -668,6 +680,83 @@ function MetricStrip({
           </span>
         </Link>
       ))}
+    </section>
+  );
+}
+
+/* ========================================================================== */
+/*  Garment categories                                                        */
+/* ========================================================================== */
+
+/**
+ * The differentiator, on the front page: how many pieces of each kind are in
+ * the building. Clicking one opens every piece in that category and where it
+ * is right now.
+ */
+function CategoryStrip({
+  categories,
+  filtered,
+}: {
+  categories: OverviewData["categories"];
+  filtered: boolean;
+}) {
+  if (categories.length === 0) {
+    return filtered ? (
+      <p className="mt-3.5 rounded-[18px] bg-white p-4 text-[11.5px] text-[#9aa0b1] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+        No garment category matches that search.
+      </p>
+    ) : null;
+  }
+
+  return (
+    <section
+      aria-label="Garment categories"
+      className="mt-3.5 rounded-[18px] bg-white p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-18px_rgba(16,24,40,0.22)]"
+    >
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h3 className="text-[13.5px] font-semibold text-[#1b2136]">Garment Categories</h3>
+          <p className="text-[11.5px] text-[#8b91a3]">
+            Pieces in the laundry right now · tap to track them
+          </p>
+        </div>
+        <Link
+          href="/mismatch"
+          className="text-[11.5px] font-medium text-[#2a78d6] hover:underline"
+        >
+          Mismatch centre
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {categories.map((row) => (
+          <Link
+            key={row.category}
+            href={`/tracking/${row.category.toLowerCase()}`}
+            className="group relative flex items-center gap-2.5 rounded-[12px] border border-[#eceef4] px-3 py-2.5 transition hover:-translate-y-0.5 hover:border-transparent hover:shadow-[0_8px_20px_-12px_rgba(16,24,40,0.4)]"
+          >
+            <span className="text-lg leading-none" aria-hidden>
+              {row.emoji}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11.5px] text-[#8b91a3]">
+                {row.label}
+              </span>
+              <span className="block text-[17px] font-semibold leading-tight text-[#1b2136]">
+                {row.onFloor}
+              </span>
+            </span>
+            {row.issues > 0 ? (
+              <span
+                className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[#eb6834] text-[10px] font-semibold text-white"
+                title={`${row.issues} need attention`}
+              >
+                {row.issues}
+              </span>
+            ) : null}
+          </Link>
+        ))}
+      </div>
     </section>
   );
 }

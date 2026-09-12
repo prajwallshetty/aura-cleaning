@@ -46,6 +46,13 @@ export const advanceStageSchema = z.object({
     .nullable()
     .optional(),
   scannedVia: z.string().optional(),
+  /** The order the station had open, so a wrong-order read is caught. */
+  contextOrderId: z
+    .string()
+    .trim()
+    .transform((value) => (value === "" || value === "none" ? null : value))
+    .nullable()
+    .optional(),
 });
 
 export const bulkAdvanceSchema = advanceStageSchema

@@ -3,7 +3,13 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, PlayCircle, RotateCcw, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  PlayCircle,
+  RotateCcw,
+  TriangleAlert,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -78,6 +84,7 @@ export function Workstation({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [slotId, setSlotId] = useState("none");
+  const [alert, setAlert] = useState<string | null>(null);
 
   const selectedItems = useMemo(
     () => items.filter((item) => selected.has(item.garmentId)),
@@ -96,12 +103,34 @@ export function Workstation({
   const handleScan = async (code: string) => {
     const result = await scanForStageAction(code, stage);
     if (!result.ok) {
+      setAlert(result.error);
       toast.error(result.error);
       return;
     }
+
+    // The same tag read twice into one batch is the operator putting one piece
+    // through as two.
+    if (selected.has(result.data.id)) {
+      const message = `${result.data.garmentCode} is already in this batch — scanned twice.`;
+      setAlert(message);
+      toast.error(message);
+      return;
+    }
+
     setSelected((current) => new Set(current).add(result.data.id));
+
+    // A stray piece is caught while it is still in the operator's hand: the
+    // banner stays up until the next clean scan, a toast alone is too easy to
+    // miss on a busy floor.
+    if (result.data.mismatchAlert) {
+      setAlert(result.data.mismatchAlert);
+      toast.error(result.data.mismatchAlert);
+      return;
+    }
+
+    setAlert(null);
     toast.success(
-      `${result.data.garmentCode} · ${result.data.typeName} (${result.data.orderNumber})`,
+      `${result.data.garmentCode} · ${result.data.typeName} · ${result.data.categoryLabel} (${result.data.orderNumber})`,
     );
   };
 
@@ -136,6 +165,7 @@ export function Workstation({
         );
       }
 
+      setAlert(null);
       setSelected(new Set());
       setNote("");
       router.refresh();
@@ -153,9 +183,29 @@ export function Workstation({
             <CardContent className="space-y-4">
               <Scanner
                 onScan={handleScan}
-                placeholder="Scan garment tag…"
+                placeholder="Scan garment tag (TR-1042)…"
                 disabled={isPending}
               />
+
+              {alert ? (
+                <div
+                  role="alert"
+                  className="flex items-start gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5 text-sm"
+                >
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-destructive">Mismatch</p>
+                    <p className="text-muted-foreground">{alert}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAlert(null)}
+                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
 
               <Input
                 value={note}

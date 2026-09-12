@@ -31,6 +31,36 @@ Prisma returns `Decimal`, which React Server Components cannot pass to Client
 Components. `num()` converts at the boundary; `plain()` in `src/lib/serialize.ts` deep
 -converts a whole query result when needed.
 
+## The garment is the unit of tracking
+
+An order is what gets billed; a garment is what gets handled. `createGarments`
+makes one row per physical piece and allocates its id from a per-category
+sequence (`TR-1042`), so the prefix on a tag identifies the bucket without a
+lookup and two categories can never collide on a number. The category is copied
+onto the garment at intake rather than read through `GarmentType`, so
+reclassifying an item in the catalogue cannot move a garment that is already
+tagged and on the floor.
+
+## Mismatches are derived, exceptions are stored
+
+`detectMismatches` compares each garment against its order and its scan ledger on
+every read, so a problem that has been put right disappears without anyone
+clearing it, and nothing can go stale. It reports, worst first: a garment marked
+lost, a piece scanned under an order it does not belong to, a read from the wrong
+category, the same tag read twice at one station, a piece filed on a rack its
+order-mates are not on, and a station the garment is recorded as having cleared
+with no scan behind it.
+
+The one thing that must survive a refresh is a judgement a person made — a
+garment reported missing, a wrong location acknowledged — and those live in
+`GarmentException` with an open/resolved state. The dashboard tiles, the category
+screens and the mismatch centre all call the same function, so a badge and the
+list behind it can never disagree.
+
+`recordGarmentScan` classifies on the way in rather than after the fact, which is
+what lets a station tell the operator the piece in their hand belongs to someone
+else's order while they are still holding it.
+
 ## A customer is a directory entry, not the billing record
 
 Orders keep their own copy of the customer's name, phone, email and address. The

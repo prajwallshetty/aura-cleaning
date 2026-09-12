@@ -14,6 +14,11 @@ import { PERMISSIONS } from "@/lib/rbac";
 import { hasPermission, requirePermission } from "@/lib/session";
 import { GARMENT_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
 import { param, scopedBranchId, type SearchParams } from "@/lib/queries/filters";
+import {
+  GARMENT_CATEGORIES,
+  categorySlug,
+  parseCategory,
+} from "@/lib/garment-categories";
 
 export const metadata = { title: "Search" };
 
@@ -33,13 +38,19 @@ export default async function SearchPage({
         <EmptyState
           icon={SearchIcon}
           title="Search anything"
-          description="Garment codes (G1001), order numbers (ORD10245), rack slots (B17) or a customer phone number."
+          description="A garment id (TR-1042), an order number (ORD10245), a category name (trousers), a rack slot (B17), or a customer's name or phone number."
         />
       </div>
     );
   }
 
   const branchId = scopedBranchId(user, params);
+
+  // Typing a category name is asking "show me every one of these and where it
+  // is", which is the tracking screen, not a list of loose matches.
+  const category = parseCategory(query);
+  if (category) redirect(`/tracking/${categorySlug(category)}`);
+
   const parsed = parseScan(query);
 
   // A direct garment hit is the most common lookup — jump straight there.
@@ -56,7 +67,7 @@ export default async function SearchPage({
   const upper = query.toUpperCase();
   const branchFilter = branchId ? { branchId } : {};
 
-  const [orders, garments, slots] = await Promise.all([
+  const [orders, garments, slots, customers] = await Promise.all([
     prisma.order.findMany({
       where: {
         ...branchFilter,
@@ -101,6 +112,27 @@ export default async function SearchPage({
         _count: { select: { garments: true } },
       },
     }),
+    hasPermission(user, PERMISSIONS.CUSTOMER_VIEW)
+      ? prisma.customer.findMany({
+          where: {
+            ...(branchId ? { branchId } : {}),
+            OR: [
+              { name: { contains: query, mode: "insensitive" } },
+              { phone: { contains: query.replace(/\D/g, "") || query } },
+              { code: { contains: upper } },
+            ],
+          },
+          orderBy: { orderCount: "desc" },
+          take: 8,
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            code: true,
+            orderCount: true,
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   const canSeeMoney = hasPermission(user, [
@@ -108,21 +140,68 @@ export default async function SearchPage({
     PERMISSIONS.DASHBOARD_VIEW_FINANCIALS,
   ]);
   const nothingFound =
-    orders.length === 0 && garments.length === 0 && slots.length === 0;
+    orders.length === 0 &&
+    garments.length === 0 &&
+    slots.length === 0 &&
+    customers.length === 0;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={`Results for “${query}”`}
-        description={`${orders.length} orders · ${garments.length} garments · ${slots.length} rack slots`}
+        description={`${garments.length} garments · ${orders.length} orders · ${customers.length} customers · ${slots.length} rack slots`}
       />
 
       {nothingFound ? (
         <EmptyState
           icon={SearchIcon}
           title="Nothing matched"
-          description="Check the code and try again. Garment codes look like G1001 and order numbers like ORD10245."
+          description="Check the code and try again. Garment ids look like TR-1042 and order numbers like ORD10245."
         />
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Jump to a category</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {GARMENT_CATEGORIES.map((meta) => (
+            <Link
+              key={meta.value}
+              href={`/tracking/${categorySlug(meta.value)}`}
+              className="rounded-full border border-border px-3 py-1.5 text-sm transition hover:bg-accent"
+            >
+              <span aria-hidden>{meta.emoji}</span> {meta.label}
+            </Link>
+          ))}
+        </CardContent>
+      </Card>
+
+      {customers.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Customers</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {customers.map((customer) => (
+              <Link
+                key={customer.id}
+                href={`/customers/${customer.id}`}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2.5 text-sm hover:bg-muted/40"
+              >
+                <div className="min-w-0">
+                  <span className="font-semibold">{customer.name}</span>
+                  <span className="ml-2 font-mono text-muted-foreground">
+                    {customer.phone} · {customer.code}
+                  </span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {customer.orderCount} order{customer.orderCount === 1 ? "" : "s"}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
       ) : null}
 
       {garments.length > 0 ? (

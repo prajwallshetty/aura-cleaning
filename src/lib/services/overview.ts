@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { num, round2 } from "@/lib/money";
 import { todayRange } from "@/lib/dates";
 import { isGlobalRole } from "@/lib/rbac";
+import { getCategoryCounts, type CategoryCount } from "@/lib/services/garment-tracking";
 import type { SessionUser } from "@/lib/session";
 
 /** One day of trading, used to draw the performance chart. */
@@ -53,6 +54,8 @@ export interface OverviewMetrics {
 
 export interface OverviewData {
   metrics: OverviewMetrics;
+  /** Live piece counts per tracking bucket, for the categories strip. */
+  categories: CategoryCount[];
   business: {
     name: string;
     ownerName: string;
@@ -365,8 +368,11 @@ export async function getOverviewData(user: SessionUser): Promise<OverviewData> 
     (entry) => entry.deliveredAt && entry.deliveredAt <= entry.scheduledAt,
   ).length;
 
+  const categories = await getCategoryCounts(branchId ? [branchId] : null);
+
   return {
     metrics,
+    categories,
     business: {
       name: branch?.name ?? "Aura Laundry",
       ownerName: user.name,
