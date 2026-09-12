@@ -8,10 +8,13 @@ const { auth } = NextAuth(authConfig);
 const PUBLIC_PATHS = ["/login", "/forbidden"];
 
 /**
- * Edge middleware gate. It only checks that a session cookie exists — every
- * permission decision is made again on the server inside the page or action.
+ * Route gate. It only checks that a session exists — every permission decision
+ * is made again on the server inside the page or action.
+ *
+ * Next 16 renamed the `middleware` convention to `proxy`; the runtime here is
+ * Node, not edge, so this file may touch Node APIs if it ever needs to.
  */
-export default auth((request) => {
+export default auth(function proxy(request) {
   const { pathname } = request.nextUrl;
   const isLoggedIn = Boolean(request.auth?.user);
   const isPublic = PUBLIC_PATHS.some((path) => pathname.startsWith(path));

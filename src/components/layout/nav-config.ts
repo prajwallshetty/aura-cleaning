@@ -1,5 +1,6 @@
 import {
   Boxes,
+  LayoutGrid,
   Building2,
   ClipboardList,
   FileBarChart,
@@ -36,6 +37,13 @@ export interface NavSection {
 export const NAV_SECTIONS: NavSection[] = [
   {
     items: [
+      {
+        label: "Overview",
+        href: "/overview",
+        icon: LayoutGrid,
+        permissions: [PERMISSIONS.DASHBOARD_VIEW],
+        exact: true,
+      },
       {
         label: "Dashboard",
         href: "/dashboard",
