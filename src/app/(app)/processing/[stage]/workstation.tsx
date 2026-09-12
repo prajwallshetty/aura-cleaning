@@ -51,6 +51,8 @@ interface WorkstationProps {
   outcomes: { value: string; label: string; tone: "default" | "success" | "destructive" | "warning" }[];
   slots: SlotOption[];
   canOperate: boolean;
+  /** Garments queued for this stage that are still finishing an earlier one. */
+  waitingUpstream?: number;
 }
 
 const OUTCOME_ICON: Record<string, typeof CheckCircle2> = {
@@ -69,6 +71,7 @@ export function Workstation({
   outcomes,
   slots,
   canOperate,
+  waitingUpstream = 0,
 }: WorkstationProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -226,7 +229,14 @@ export function Workstation({
       <div className="lg:col-span-3">
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle>Queue ({items.length})</CardTitle>
+            <div>
+              <CardTitle>Queue ({items.length})</CardTitle>
+              {waitingUpstream > 0 ? (
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {waitingUpstream} more still finishing an earlier station
+                </p>
+              ) : null}
+            </div>
             {canOperate && items.length > 0 ? (
               <Button
                 variant="ghost"
@@ -247,7 +257,11 @@ export function Workstation({
             {items.length === 0 ? (
               <EmptyState
                 title="Queue is clear"
-                description={`Nothing is waiting at ${stageLabel.toLowerCase()} right now.`}
+                description={
+                  waitingUpstream > 0
+                    ? `${waitingUpstream} garments are routed here but are still finishing an earlier station.`
+                    : `Nothing is waiting at ${stageLabel.toLowerCase()} right now.`
+                }
               />
             ) : (
               <ul className="space-y-1.5">

@@ -2,12 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { buildBarcodeValue, buildQrPayload } from "@/lib/codes";
 import { nextGarmentCodeBlock } from "@/lib/sequence";
-import {
-  buildPipeline,
-  garmentStatusFor,
-  orderStatusForStage,
-  STAGE_ORDER,
-} from "@/lib/workflow";
+import { buildPipeline, garmentStatusFor, STAGE_ORDER } from "@/lib/workflow";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
   GarmentStatus,
@@ -175,34 +170,25 @@ export async function moveGarmentToSlot(
   });
 }
 
-const STATUS_RANK = new Map<GarmentStatus, number>([
-  ["RECEIVED", 0],
-  ["SORTING", 1],
-  ["SORTED", 2],
-  ["REWASH", 3],
-  ["WASHING", 4],
-  ["WASHED", 5],
-  ["DRYING", 6],
-  ["DRIED", 7],
-  ["REWORK", 8],
-  ["IRONING", 9],
-  ["IRONED", 10],
-  ["QC_PENDING", 11],
-  ["QC_FAILED", 11],
-  ["QC_PASSED", 12],
-  ["PACKING", 13],
-  ["PACKED", 14],
-  ["READY", 15],
-  ["OUT_FOR_DELIVERY", 16],
-  ["DELIVERED", 17],
-  ["RETURNED", 17],
-  ["LOST", 17],
-  ["DAMAGED", 17],
-]);
+/** Stage → the order status a customer would be told. */
+const ORDER_STATUS_FOR_STAGE: Record<ProcessingStage, OrderStatus> = {
+  RECEIVING: "RECEIVED",
+  SORTING: "SORTING",
+  WASHING: "WASHING",
+  DRYING: "DRYING",
+  IRONING: "IRONING",
+  QUALITY_CHECK: "QUALITY_CHECK",
+  PACKING: "PACKING",
+  DISPATCH: "OUT_FOR_DELIVERY",
+};
+
+const DONE_TASK_STATUSES: TaskStatus[] = ["COMPLETED", "PASSED", "SKIPPED"];
 
 /**
- * An order is only as far along as its least-advanced garment. Recomputing
- * from the garments keeps the order header honest without duplicating state.
+ * An order is only as far along as its least-advanced garment, and a garment's
+ * position is the station it is *waiting at* — not the last one it cleared.
+ * Recomputing from the garments keeps the order header honest without
+ * duplicating state.
  */
 export async function recomputeOrderStatus(
   tx: Tx,
@@ -215,7 +201,7 @@ export async function recomputeOrderStatus(
   });
   if (!order) return null;
 
-  // Manual/terminal states are never overwritten by shop-floor activity.
+  // Manual and terminal states are never overwritten by shop-floor activity.
   if (
     order.status === "CANCELLED" ||
     order.status === "REFUNDED" ||
@@ -226,45 +212,57 @@ export async function recomputeOrderStatus(
 
   const garments = await tx.garment.findMany({
     where: { orderId },
-    select: { status: true, currentStage: true },
+    select: {
+      status: true,
+      currentStage: true,
+      tasks: {
+        select: { stage: true, sequence: true, status: true },
+        orderBy: { sequence: "asc" },
+      },
+    },
   });
 
   if (garments.length === 0) return order.status;
 
   const trackable = garments.filter(
-    (g) => g.status !== "LOST" && g.status !== "DAMAGED",
+    (garment) => garment.status !== "LOST" && garment.status !== "DAMAGED",
   );
   const pool = trackable.length > 0 ? trackable : garments;
 
-  let laggard = pool[0];
-  let lowestRank = STATUS_RANK.get(pool[0].status) ?? 0;
-
-  for (const garment of pool) {
-    const rank = STATUS_RANK.get(garment.status) ?? 0;
-    if (rank < lowestRank) {
-      lowestRank = rank;
-      laggard = garment;
-    }
-  }
-
-  const allDelivered = pool.every((g) => g.status === "DELIVERED");
-  const someDelivered = pool.some((g) => g.status === "DELIVERED");
-  const allPacked = pool.every((g) =>
-    ["PACKED", "READY", "OUT_FOR_DELIVERY", "DELIVERED"].includes(g.status),
+  const allDelivered = pool.every((garment) => garment.status === "DELIVERED");
+  const someDelivered = pool.some((garment) => garment.status === "DELIVERED");
+  const anyOut = pool.some((garment) => garment.status === "OUT_FOR_DELIVERY");
+  const allPacked = pool.every((garment) =>
+    ["PACKED", "READY", "OUT_FOR_DELIVERY", "DELIVERED"].includes(garment.status),
   );
-  const anyOut = pool.some((g) => g.status === "OUT_FOR_DELIVERY");
 
   let nextStatus: OrderStatus;
+
   if (allDelivered) nextStatus = "DELIVERED";
   else if (someDelivered) nextStatus = "PARTIALLY_DELIVERED";
   else if (anyOut) nextStatus = "OUT_FOR_DELIVERY";
   else if (allPacked) nextStatus = "READY";
   else {
-    const stage = laggard.currentStage;
-    const taskStatus: TaskStatus = laggard.status.endsWith("ED")
-      ? "COMPLETED"
-      : "IN_PROGRESS";
-    nextStatus = orderStatusForStage(stage, taskStatus);
+    // The station the slowest garment is queued at.
+    let slowest: ProcessingStage = "DISPATCH";
+    let slowestRank = STAGE_ORDER.length;
+
+    for (const garment of pool) {
+      const openTask = garment.tasks.find(
+        (task) => !DONE_TASK_STATUSES.includes(task.status),
+      );
+      const stage = openTask?.stage ?? "DISPATCH";
+      const rank = STAGE_ORDER.indexOf(stage);
+      if (rank < slowestRank) {
+        slowestRank = rank;
+        slowest = stage;
+      }
+    }
+
+    nextStatus =
+      pool.every((garment) => garment.status === "RECEIVED") && slowest === "SORTING"
+        ? "RECEIVED"
+        : ORDER_STATUS_FOR_STAGE[slowest];
   }
 
   if (nextStatus === order.status) return order.status;

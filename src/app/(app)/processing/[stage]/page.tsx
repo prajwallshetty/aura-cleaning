@@ -90,12 +90,14 @@ export default async function WorkstationPage({
         garment: { status: { notIn: ["LOST", "DELIVERED"] } },
       },
       orderBy: [{ garment: { order: { priority: "desc" } } }, { createdAt: "asc" }],
-      take: 200,
+      take: 300,
       include: {
         garment: {
           include: {
             garmentType: { select: { name: true } },
             service: { select: { name: true } },
+            // Needed to tell "ready for this station" apart from "still upstream".
+            tasks: { select: { sequence: true, status: true } },
             order: {
               select: {
                 id: true,
@@ -131,7 +133,20 @@ export default async function WorkstationPage({
   ]);
 
   const now = new Date();
-  const items: QueueItem[] = tasks.map((task) => ({
+  const DONE: TaskStatus[] = ["COMPLETED", "PASSED", "SKIPPED"];
+
+  // A garment only belongs at this station once every earlier stage is done.
+  // Anything still upstream is counted, not listed, so the queue an operator
+  // sees is exactly the work they can actually pick up.
+  const isReady = (task: (typeof tasks)[number]) =>
+    !task.garment.tasks.some(
+      (other) => other.sequence < task.sequence && !DONE.includes(other.status),
+    );
+
+  const actionable = tasks.filter(isReady);
+  const waitingUpstream = tasks.length - actionable.length;
+
+  const items: QueueItem[] = actionable.slice(0, 200).map((task) => ({
     taskId: task.id,
     garmentId: task.garmentId,
     garmentCode: task.garment.garmentCode,
@@ -202,6 +217,7 @@ export default async function WorkstationPage({
           label: `${slot.rack.code} · ${slot.code} (${slot._count.garments}/${slot.capacity})`,
         }))}
         canOperate={canOperate}
+        waitingUpstream={waitingUpstream}
       />
     </div>
   );
