@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateOperational } from "@/lib/revalidate";
+
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -67,7 +69,7 @@ export async function saveRackAction(payload: unknown): Promise<ActionResult<{ i
       summary: `Rack ${rack.code} — ${rack.name}`,
     });
 
-    revalidatePath("/racks");
+    revalidateOperational();
     return { id: rack.id };
   });
 }
@@ -113,8 +115,7 @@ export async function saveSlotAction(payload: unknown): Promise<ActionResult<{ i
       summary: `Slot ${rack.code} · ${slot.code}`,
     });
 
-    revalidatePath(`/racks/${rack.id}`);
-    revalidatePath("/racks");
+    revalidateOperational([`/racks/${rack.id}`]);
     return { id: slot.id };
   });
 }
@@ -201,7 +202,7 @@ export async function releaseGarmentsAction(
       summary: `${released} garments removed from racks`,
     });
 
-    revalidatePath("/racks");
+    revalidateOperational();
     return { released };
   });
 }
@@ -240,7 +241,7 @@ export async function deleteRackAction(rackId: string): Promise<ActionResult<nul
       summary: `Deleted rack ${rack.code}`,
     });
 
-    revalidatePath("/racks");
+    revalidateOperational();
     return null;
   });
 }

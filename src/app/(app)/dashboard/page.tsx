@@ -16,6 +16,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -129,6 +130,7 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={20000} />
       <PageHeader
         title="Dashboard"
         description={`${formatDate(range.from)} – ${formatDate(range.to)}${user.branchName && !canSeeAllBranches ? ` · ${user.branchName}` : ""}`}

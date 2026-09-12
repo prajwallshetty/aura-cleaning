@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
+
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -78,9 +80,7 @@ export async function createOrderAction(
       after: { orderNumber: result.orderNumber, total: result.totalAmount },
     });
 
-    revalidatePath("/orders");
-    revalidatePath("/dashboard");
-    revalidatePath("/processing");
+    revalidateOperational();
 
     return {
       id: result.id,
@@ -143,8 +143,7 @@ export async function updateOrderAction(payload: unknown): Promise<ActionResult<
       after: input,
     });
 
-    revalidatePath(`/orders/${input.orderId}`);
-    revalidatePath("/orders");
+    revalidateOperational([`/orders/${input.orderId}`]);
     return null;
   });
 }
@@ -210,9 +209,7 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       });
     }
 
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/orders");
-    revalidatePath("/dashboard");
+    revalidateOperational([`/orders/${order.id}`]);
     return null;
   });
 }
@@ -316,9 +313,7 @@ export async function cancelOrderAction(payload: unknown): Promise<ActionResult<
       summary: `Cancelled ${order.orderNumber}: ${input.reason}${input.refundAmount > 0 ? ` (refund ${formatCurrency(input.refundAmount)})` : ""}`,
     });
 
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/orders");
-    revalidatePath("/dashboard");
+    revalidateOperational([`/orders/${order.id}`]);
     return null;
   });
 }
@@ -468,8 +463,7 @@ export async function rewashOrderAction(
       summary: `Rewash of ${order.orderNumber} (${count} garments): ${reason}`,
     });
 
-    revalidatePath(`/orders/${orderId}`);
-    revalidatePath("/processing");
+    revalidateOperational([`/orders/${orderId}`]);
     return { count };
   });
 }

@@ -23,6 +23,7 @@ import {
   normalisePhone,
   searchCustomersForOrder,
 } from "@/lib/services/customers";
+import { cuidSchema } from "@/lib/validations/common";
 import {
   createCustomerSchema,
   updateCustomerSchema,
@@ -132,6 +133,71 @@ export async function updateCustomerAction(payload: unknown): Promise<ActionResu
     revalidatePath("/customers");
     revalidatePath(`/customers/${customer.id}`);
     return null;
+  });
+}
+
+/**
+ * Removing a customer from the directory.
+ *
+ * A customer with orders is never destroyed — their orders carry the billing
+ * snapshot and deleting the row would orphan history — so they are retired
+ * instead, which takes them out of the pickers while leaving every order
+ * intact. Only a record that has never been used is actually deleted.
+ */
+export async function deleteCustomerAction(
+  payload: unknown,
+): Promise<ActionResult<{ deleted: boolean }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.CUSTOMER_MANAGE);
+    const { customerId } = z.object({ customerId: cuidSchema }).parse(payload);
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        branchId: true,
+        isActive: true,
+        _count: { select: { orders: true } },
+      },
+    });
+    if (!customer) throw new NotFoundError("Customer not found");
+    assertBranchAccess(user, customer.branchId);
+
+    if (customer._count.orders > 0) {
+      if (!customer.isActive) {
+        throw new BusinessRuleError(`${customer.name} is already retired`);
+      }
+      await prisma.customer.update({
+        where: { id: customer.id },
+        data: { isActive: false },
+      });
+      await recordAudit({
+        userId: user.id,
+        branchId: customer.branchId,
+        action: "CUSTOMER_RETIRED",
+        entity: "Customer",
+        entityId: customer.id,
+        summary: `${customer.name} retired — ${customer._count.orders} orders kept`,
+      });
+      revalidatePath("/customers");
+      revalidatePath(`/customers/${customer.id}`);
+      return { deleted: false };
+    }
+
+    await prisma.customer.delete({ where: { id: customer.id } });
+    await recordAudit({
+      userId: user.id,
+      branchId: customer.branchId,
+      action: "CUSTOMER_DELETED",
+      entity: "Customer",
+      entityId: customer.id,
+      summary: `${customer.name} (${customer.phone}) removed from the directory`,
+    });
+
+    revalidatePath("/customers");
+    return { deleted: true };
   });
 }
 

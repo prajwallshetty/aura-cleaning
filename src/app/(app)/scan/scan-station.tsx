@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  ArrowRightLeft,
   BadgeIndianRupee,
   CheckCircle2,
   ExternalLink,
@@ -18,6 +20,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+
+import { signalDataChange } from "@/components/shared/live-refresh";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,9 +47,22 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { formatCurrency } from "@/lib/money";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import type { ScanHistoryRow, ScannedOrder } from "@/lib/services/scanning";
+import type {
+  ScanHistoryRow,
+  ScanOutcome,
+  ScannedOrder,
+} from "@/lib/services/scanning";
 
-import { scanHistoryAction, scanPaymentAction, scanStatusAction, scanTagAction } from "./actions";
+import {
+  scanHistoryAction,
+  scanPaymentAction,
+  scanStatusAction,
+  scanTagAction,
+} from "./actions";
+import {
+  correctOrderAction,
+  moveGarmentAction,
+} from "@/app/(app)/mismatch/actions";
 
 /** The forward path a counter operator walks an order along. */
 const FLOW = [
@@ -75,12 +92,22 @@ interface Props {
   history: ScanHistoryRow[];
   canUpdateStatus: boolean;
   canTakePayment: boolean;
+  canMove: boolean;
 }
 
-export function ScanStation({ history: initialHistory, canUpdateStatus, canTakePayment }: Props) {
+export function ScanStation({
+  history: initialHistory,
+  canUpdateStatus,
+  canTakePayment,
+  canMove,
+}: Props) {
+  const router = useRouter();
   const [order, setOrder] = useState<ScannedOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [strayOrder, setStrayOrder] = useState<{ code: string; orderNumber: string } | null>(
+  const [stray, setStray] = useState<NonNullable<
+    ScanOutcome["wrongOrder"]
+  > | null>(null);
+  const [matched, setMatched] = useState<{ code: string; at: number } | null>(
     null,
   );
   const [history, setHistory] = useState(initialHistory);
@@ -108,6 +135,7 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
           if (!result.ok) {
             setError(result.error);
             setOrder(null);
+            setMatched(null);
             toast.error(result.error);
             resolve();
             return;
@@ -116,15 +144,9 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
           const outcome = result.data;
           if (!outcome.ok || !outcome.order) {
             setError(outcome.message);
-            setStrayOrder(
-              outcome.wrongOrder
-                ? {
-                    code: outcome.wrongOrder.garmentCode,
-                    orderNumber: outcome.wrongOrder.belongsToOrderNumber,
-                  }
-                : null,
-            );
+            setStray(outcome.wrongOrder ?? null);
             setOrder(null);
+            setMatched(null);
             toast.error(outcome.message);
           } else {
             // Rescanning a tag that is already open is a no-op, not a new
@@ -132,8 +154,9 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
             const repeat = lastCodeRef.current === code;
             lastCodeRef.current = code;
             setError(null);
-            setStrayOrder(null);
+            setStray(null);
             setOrder(outcome.order);
+            setMatched({ code: outcome.order.orderNumber, at: Date.now() });
             toast.success(
               repeat
                 ? `${outcome.order.orderNumber} already open`
@@ -147,8 +170,6 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
     [historySearch, refreshHistory],
   );
 
-
-
   const reload = useCallback(() => {
     if (order) void runScan(order.orderNumber);
   }, [order, runScan]);
@@ -159,7 +180,10 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
       startTransition(async () => {
         const result = await scanStatusAction({ orderId: order.id, status });
         if (result.ok) {
-          toast.success(`${order.orderNumber} is now ${FLOW_LABELS[status] ?? status}`);
+          toast.success(
+            `${order.orderNumber} is now ${FLOW_LABELS[status] ?? status}`,
+          );
+          signalDataChange();
           void runScan(order.orderNumber);
         } else {
           toast.error(result.error);
@@ -170,7 +194,12 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
   );
 
   const nextStatus = order
-    ? FLOW[Math.min(FLOW.indexOf(order.status as (typeof FLOW)[number]) + 1, FLOW.length - 1)]
+    ? FLOW[
+        Math.min(
+          FLOW.indexOf(order.status as (typeof FLOW)[number]) + 1,
+          FLOW.length - 1,
+        )
+      ]
     : null;
   const canAdvance =
     order !== null &&
@@ -188,52 +217,91 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Scanner
-              onScan={(code) => runScan(code, "KEYBOARD", order?.id ?? null)}
-              placeholder="Scan the order tag, or type ORD10001 / G1001"
-              debounceMs={700}
-            />
+            <div
+              className={cn(
+                "relative overflow-hidden rounded-lg",
+                pending && "scan-sweep",
+              )}
+            >
+              <Scanner
+                onScan={(code) => runScan(code, "KEYBOARD", order?.id ?? null)}
+                placeholder="Scan a tag, or type ORD10001 / TR-1042"
+                debounceMs={700}
+              />
+            </div>
+            {matched ? (
+              <div
+                key={matched.at}
+                className="animate-pop flex items-center gap-2 rounded-lg border border-success/50 bg-success/10 px-3 py-2.5"
+                role="status"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className="check-draw size-5 shrink-0 text-success"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                <p className="text-sm font-medium text-success">
+                  🟢 Garment matched — {matched.code} open below
+                </p>
+              </div>
+            ) : null}
+
             <p className="text-xs text-muted-foreground">
-              Works with a USB or Bluetooth scanner (they type like a keyboard), the device
-              camera, and QR or CODE128 barcodes. Scanning the same tag again simply reopens
-              the order.
+              Works with a USB or Bluetooth scanner (they type like a keyboard),
+              the device camera, and QR or CODE128 barcodes. Scanning the same
+              tag again simply reopens the order.
             </p>
           </CardContent>
         </Card>
 
-        {error ? (
-          <Card className="border-destructive/50 bg-destructive/5">
+        {stray ? (
+          <GarmentMismatchPanel
+            stray={stray}
+            pending={pending}
+            canReassign={canUpdateStatus}
+            canMove={canMove}
+            onDismiss={() => {
+              setStray(null);
+              setError(null);
+            }}
+            onOpenActual={() => {
+              const target = stray.actual.orderNumber;
+              setOrder(null);
+              setError(null);
+              setStray(null);
+              void runScan(target);
+            }}
+            onResolved={() => {
+              setStray(null);
+              setError(null);
+              signalDataChange();
+              router.refresh();
+            }}
+          />
+        ) : error ? (
+          <Card className="animate-shake border-destructive/50 bg-destructive/5">
             <CardContent className="flex items-start gap-3 pt-6">
               <XCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
               <div className="space-y-2">
                 <p className="font-medium text-destructive">
-                  {strayOrder ? "Wrong order" : "Tag not recognised"}
+                  Tag not recognised
                 </p>
                 <p className="text-sm text-muted-foreground">{error}</p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => {
-                      setError(null);
-                      setStrayOrder(null);
-                    }}
+                    onClick={() => setError(null)}
                   >
                     <ScanLine /> Scan again
                   </Button>
-                  {strayOrder ? (
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        setOrder(null);
-                        setError(null);
-                        void runScan(strayOrder.orderNumber);
-                        setStrayOrder(null);
-                      }}
-                    >
-                      Open {strayOrder.orderNumber}
-                    </Button>
-                  ) : null}
                   <Button size="sm" variant="ghost" asChild>
                     <Link href="/mismatch">Mismatch centre</Link>
                   </Button>
@@ -264,8 +332,9 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
               <ScanLine className="size-10 text-muted-foreground/50" />
               <p className="font-medium">Waiting for a tag</p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                Point the scanner at the tag on the bundle, or type the order id. The order,
-                its items, its status and what is still owed all appear here.
+                Point the scanner at the tag on the bundle, or type the order
+                id. The order, its items, its status and what is still owed all
+                appear here.
               </p>
             </CardContent>
           </Card>
@@ -296,7 +365,10 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canTakeP
             <ol className="max-h-[560px] space-y-1.5 overflow-y-auto pr-1">
               {history.map((row) => (
                 <li key={row.id}>
-                  <ScanHistoryItem row={row} onReopen={(code) => void runScan(code)} />
+                  <ScanHistoryItem
+                    row={row}
+                    onReopen={(code) => void runScan(code)}
+                  />
                 </li>
               ))}
             </ol>
@@ -363,7 +435,12 @@ function OrderCard({
               {order.customerName} · {order.customerPhone} · {order.branchName}
             </p>
           </div>
-          <Button size="sm" variant="ghost" onClick={onRefresh} disabled={pending}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onRefresh}
+            disabled={pending}
+          >
             <RotateCcw /> Refresh
           </Button>
         </div>
@@ -371,10 +448,14 @@ function OrderCard({
         {order.scannedGarment ? (
           <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
             Scanned piece{" "}
-            <span className="font-mono font-semibold">{order.scannedGarment.code}</span> ·{" "}
-            {order.scannedGarment.categoryLabel} · {order.scannedGarment.typeName} ·{" "}
-            {order.scannedGarment.serviceName}
-            {order.scannedGarment.slot ? ` · rack ${order.scannedGarment.slot}` : ""}
+            <span className="font-mono font-semibold">
+              {order.scannedGarment.code}
+            </span>{" "}
+            · {order.scannedGarment.categoryLabel} ·{" "}
+            {order.scannedGarment.typeName} · {order.scannedGarment.serviceName}
+            {order.scannedGarment.slot
+              ? ` · rack ${order.scannedGarment.slot}`
+              : ""}
           </div>
         ) : null}
 
@@ -385,12 +466,15 @@ function OrderCard({
           >
             <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
               <AlertTriangle className="size-4" />
-              {order.issues.length} piece{order.issues.length === 1 ? "" : "s"} on this
-              order need attention
+              {order.issues.length} piece{order.issues.length === 1 ? "" : "s"}{" "}
+              on this order need attention
             </p>
             <ul className="space-y-1 text-sm">
               {order.issues.map((issue) => (
-                <li key={issue.garmentId} className="flex flex-wrap items-center gap-2">
+                <li
+                  key={issue.garmentId}
+                  className="flex flex-wrap items-center gap-2"
+                >
                   <Link
                     href={`/garments/${issue.garmentCode}`}
                     className="font-mono font-medium text-primary hover:underline"
@@ -425,7 +509,9 @@ function OrderCard({
                     href={`/tracking/${entry.category.toLowerCase()}`}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition hover:bg-accent",
-                      complete ? "border-success/50 bg-success/5" : "border-warning/50 bg-warning/5",
+                      complete
+                        ? "border-success/50 bg-success/5"
+                        : "border-warning/50 bg-warning/5",
                     )}
                   >
                     <span aria-hidden>{entry.emoji}</span>
@@ -476,11 +562,16 @@ function OrderCard({
           </p>
           <ul className="divide-y divide-border rounded-lg border border-border">
             {order.items.map((item) => (
-              <li key={item.id} className="flex items-center justify-between px-3 py-2 text-sm">
+              <li
+                key={item.id}
+                className="flex items-center justify-between px-3 py-2 text-sm"
+              >
                 <span>
                   {item.quantity}× {item.label}
                 </span>
-                <span className="numeric">{formatCurrency(item.lineTotal)}</span>
+                <span className="numeric">
+                  {formatCurrency(item.lineTotal)}
+                </span>
               </li>
             ))}
           </ul>
@@ -488,7 +579,8 @@ function OrderCard({
 
         {order.specialInstructions ? (
           <p className="rounded-lg bg-muted px-3 py-2 text-sm">
-            <span className="font-medium">Instructions:</span> {order.specialInstructions}
+            <span className="font-medium">Instructions:</span>{" "}
+            {order.specialInstructions}
           </p>
         ) : null}
 
@@ -505,7 +597,9 @@ function OrderCard({
                   onClick={() => nextStatus && onSetStatus(nextStatus)}
                 >
                   <ArrowRight /> Update status
-                  {canAdvance && nextStatus ? ` → ${FLOW_LABELS[nextStatus]}` : ""}
+                  {canAdvance && nextStatus
+                    ? ` → ${FLOW_LABELS[nextStatus]}`
+                    : ""}
                 </Button>
                 <Button
                   size="sm"
@@ -537,7 +631,8 @@ function OrderCard({
             ) : null}
             <Button size="sm" variant="outline" asChild>
               <Link href={`/orders/${order.id}/tags`}>
-                <Printer /> {order.tagPrintCount > 0 ? "Reprint tag" : "Print tag"}
+                <Printer />{" "}
+                {order.tagPrintCount > 0 ? "Reprint tag" : "Print tag"}
               </Link>
             </Button>
             <Button size="sm" variant="outline" asChild>
@@ -580,7 +675,9 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg border border-border px-3 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p
         className={cn(
           "flex items-center gap-1 text-sm font-semibold",
@@ -677,7 +774,8 @@ function PaymentDialog({
         <DialogHeader>
           <DialogTitle>Take payment · {order.orderNumber}</DialogTitle>
           <DialogDescription>
-            {formatCurrency(order.outstandingAmount)} outstanding from {order.customerName}.
+            {formatCurrency(order.outstandingAmount)} outstanding from{" "}
+            {order.customerName}.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -723,7 +821,9 @@ function PaymentDialog({
             Cancel
           </Button>
           <Button
-            disabled={pending || amount <= 0 || amount > order.outstandingAmount}
+            disabled={
+              pending || amount <= 0 || amount > order.outstandingAmount
+            }
             onClick={() =>
               startTransition(async () => {
                 const result = await scanPaymentAction({
@@ -736,6 +836,7 @@ function PaymentDialog({
                   toast.success(
                     `${formatCurrency(amount)} taken · ${formatCurrency(result.data.outstanding)} left`,
                   );
+                  signalDataChange();
                   onDone();
                 } else {
                   toast.error(result.error);
@@ -748,5 +849,185 @@ function PaymentDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * What the counter sees when a piece does not belong to the order on screen.
+ *
+ * The whole point is the side-by-side: expected customer, order and location
+ * against the actual ones, so the operator can see at a glance whether they
+ * picked up the wrong bundle or the piece was mis-tagged — and then fix it
+ * without leaving the station.
+ */
+function GarmentMismatchPanel({
+  stray,
+  pending,
+  canReassign,
+  canMove,
+  onDismiss,
+  onOpenActual,
+  onResolved,
+}: {
+  stray: NonNullable<ScanOutcome["wrongOrder"]>;
+  pending: boolean;
+  canReassign: boolean;
+  canMove: boolean;
+  onDismiss: () => void;
+  onOpenActual: () => void;
+  onResolved: () => void;
+}) {
+  const [busy, startBusy] = useTransition();
+  const disabled = pending || busy;
+
+  const rows = [
+    {
+      label: "Customer",
+      expected: stray.expected.customerName,
+      actual: stray.actual.customerName,
+    },
+    {
+      label: "Order",
+      expected: stray.expected.orderNumber,
+      actual: stray.actual.orderNumber,
+    },
+    {
+      label: "Location",
+      expected: stray.expected.location,
+      actual: stray.actual.location,
+    },
+  ];
+
+  return (
+    <Card className="animate-shake border-destructive/60 bg-destructive/5">
+      <CardContent className="space-y-4 pt-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex size-9 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+            <AlertTriangle className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-base font-semibold text-destructive">
+              🔴 Garment mismatch
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <span className="font-mono font-medium">{stray.garmentCode}</span>{" "}
+              · {stray.categoryLabel} · last scanned{" "}
+              {stray.actual.lastScanAt
+                ? formatDateTime(stray.actual.lastScanAt)
+                : "never"}
+            </p>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-destructive/30">
+          <div className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)] bg-destructive/10 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="px-3 py-1.5" />
+            <span className="px-3 py-1.5">Expected</span>
+            <span className="px-3 py-1.5">Actual</span>
+          </div>
+          {rows.map((row) => {
+            const same = row.expected === row.actual;
+            return (
+              <div
+                key={row.label}
+                className="grid grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1fr)] border-t border-destructive/20 text-sm"
+              >
+                <span className="px-3 py-2 text-muted-foreground">
+                  {row.label}
+                </span>
+                <span className="truncate px-3 py-2">{row.expected}</span>
+                <span
+                  className={cn(
+                    "truncate px-3 py-2 font-medium",
+                    same ? "" : "text-destructive",
+                  )}
+                >
+                  {row.actual}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={onOpenActual} disabled={disabled}>
+            <ExternalLink /> Open {stray.actual.orderNumber}
+          </Button>
+
+          {canReassign ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() =>
+                startBusy(async () => {
+                  const result = await correctOrderAction({
+                    garmentId: stray.garmentId,
+                    orderNumber: stray.expected.orderNumber,
+                  });
+                  if (result.ok) {
+                    toast.success(
+                      `${stray.garmentCode} moved onto ${stray.expected.orderNumber}`,
+                    );
+                    signalDataChange();
+                    onResolved();
+                  } else {
+                    toast.error(result.error);
+                  }
+                })
+              }
+            >
+              <ArrowRightLeft /> Correct order
+            </Button>
+          ) : null}
+
+          {canMove ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={disabled}
+              onClick={() =>
+                startBusy(async () => {
+                  const result = await moveGarmentAction({
+                    garmentId: stray.garmentId,
+                    rackSlotId: "order",
+                  });
+                  if (result.ok) {
+                    toast.success(
+                      `${stray.garmentCode} moved back with its order`,
+                    );
+                    signalDataChange();
+                    onResolved();
+                  } else {
+                    toast.error(result.error);
+                  }
+                })
+              }
+            >
+              <MapPin /> Move garment
+            </Button>
+          ) : null}
+
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/orders/${stray.actual.orderId}/tags`}>
+              <Printer /> Print tag
+            </Link>
+          </Button>
+          <Button size="sm" variant="ghost" asChild>
+            <Link href={`/garments/${stray.garmentCode}`}>
+              <ExternalLink /> View garment
+            </Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onDismiss}
+            disabled={disabled}
+          >
+            <ScanLine /> Scan again
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

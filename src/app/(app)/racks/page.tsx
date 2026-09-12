@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { NewRackDialog } from "@/app/(app)/racks/rack-dialogs";
@@ -64,6 +65,7 @@ export default async function RacksPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={30000} />
       <PageHeader
         title="Rack & location"
         description="Physical storage map. Search any order or garment code to find its slot."

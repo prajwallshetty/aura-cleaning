@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock3, ScanLine, ShieldCheck } from "luci
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +82,7 @@ export default async function MismatchPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={15000} />
       <PageHeader
         title="Mismatch Center"
         description={`${totals.correct} of ${totals.total} pieces on the floor account for themselves. The rest are here.`}

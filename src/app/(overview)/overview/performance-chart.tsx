@@ -199,7 +199,12 @@ export function PerformanceChart({
                 stroke={entry.color}
                 strokeWidth={2}
                 dot={false}
-                isAnimationActive={false}
+                // Lines draw themselves in, then redraw when the range or the
+                // underlying figures change — the movement is how a reader
+                // notices the data updated under them.
+                isAnimationActive
+                animationDuration={720}
+                animationEasing="ease-out"
                 activeDot={{
                   r: 4.5,
                   strokeWidth: 2,

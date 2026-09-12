@@ -28,7 +28,7 @@ import { getCustomerProfile } from "@/lib/services/customers";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
 import type { OrderStatus } from "@/generated/prisma/enums";
 
-import { EditCustomerDialog } from "../customer-dialogs";
+import { DeleteCustomerButton, EditCustomerDialog } from "../customer-dialogs";
 
 export const metadata = { title: "Customer" };
 
@@ -144,6 +144,13 @@ export default async function CustomerProfilePage({
                   notes: customer.notes ?? "",
                   isActive: customer.isActive,
                 }}
+              />
+            ) : null}
+            {hasPermission(user, PERMISSIONS.CUSTOMER_MANAGE) ? (
+              <DeleteCustomerButton
+                customerId={customer.id}
+                name={customer.name}
+                orderCount={customer.orderCount}
               />
             ) : null}
             {canBook ? (

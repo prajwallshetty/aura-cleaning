@@ -2,7 +2,11 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { parseScan } from "@/lib/codes";
-import { ORDER_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
+import {
+  GARMENT_STATUS_LABELS,
+  ORDER_STATUS_LABELS,
+  STAGE_LABELS,
+} from "@/lib/workflow";
 import { categoryMeta } from "@/lib/garment-categories";
 import {
   MISMATCH_LABELS,
@@ -68,12 +72,25 @@ export interface ScanOutcome {
   kind: ScanTargetKind;
   message: string;
   order: ScannedOrder | null;
-  /** Set when a garment was read against an order it does not belong to. */
+  /**
+   * Set when a garment was read against an order it does not belong to. Both
+   * sides travel with it so the counter can see what it expected next to what
+   * it actually has, rather than being told only that something is wrong.
+   */
   wrongOrder?: {
     garmentId: string;
     garmentCode: string;
-    belongsToOrderId: string;
-    belongsToOrderNumber: string;
+    categoryLabel: string;
+    expected: { orderNumber: string; customerName: string; location: string };
+    actual: {
+      orderId: string;
+      orderNumber: string;
+      customerName: string;
+      customerPhone: string;
+      location: string;
+      statusLabel: string;
+      lastScanAt: string | null;
+    };
   };
 }
 
@@ -276,6 +293,9 @@ export async function resolveScan(
         trackingCategory: true,
         currentStage: true,
         branchId: true,
+        status: true,
+        lastScannedAt: true,
+        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
         order: { select: { orderNumber: true } },
       },
     });
@@ -285,10 +305,30 @@ export async function resolveScan(
       // case the mismatch engine exists to catch, so say so rather than
       // quietly swapping the card for a different order.
       if (contextOrderId && contextOrderId !== garment.orderId) {
-        const context = await prisma.order.findUnique({
-          where: { id: contextOrderId },
-          select: { orderNumber: true },
-        });
+        const [context, actual] = await Promise.all([
+          prisma.order.findUnique({
+            where: { id: contextOrderId },
+            select: {
+              orderNumber: true,
+              customerName: true,
+              rackSlot: { select: { code: true, rack: { select: { code: true } } } },
+            },
+          }),
+          prisma.order.findUnique({
+            where: { id: garment.orderId },
+            select: {
+              id: true,
+              orderNumber: true,
+              customerName: true,
+              customerPhone: true,
+            },
+          }),
+        ]);
+
+        const slotLabel = garment.rackSlot
+          ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
+          : STAGE_LABELS[garment.currentStage];
+
         return {
           ok: false,
           kind: "GARMENT",
@@ -297,8 +337,23 @@ export async function resolveScan(
           wrongOrder: {
             garmentId: garment.id,
             garmentCode: garment.garmentCode,
-            belongsToOrderId: garment.orderId,
-            belongsToOrderNumber: garment.order.orderNumber,
+            categoryLabel: categoryMeta(garment.trackingCategory).label,
+            expected: {
+              orderNumber: context?.orderNumber ?? "—",
+              customerName: context?.customerName ?? "—",
+              location: context?.rackSlot
+                ? `${context.rackSlot.rack.code}-${context.rackSlot.code}`
+                : "On the floor",
+            },
+            actual: {
+              orderId: actual?.id ?? garment.orderId,
+              orderNumber: actual?.orderNumber ?? garment.order.orderNumber,
+              customerName: actual?.customerName ?? "—",
+              customerPhone: actual?.customerPhone ?? "—",
+              location: slotLabel,
+              statusLabel: GARMENT_STATUS_LABELS[garment.status],
+              lastScanAt: garment.lastScannedAt?.toISOString() ?? null,
+            },
           },
         };
       }

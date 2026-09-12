@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
+
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -509,10 +511,7 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
       summary: `${delivery.deliveryNumber} → ${input.outcome}${input.amountCollected > 0 ? ` · collected ${formatCurrency(input.amountCollected)}` : ""}`,
     });
 
-    revalidatePath("/delivery");
-    revalidatePath("/driver");
-    revalidatePath(`/orders/${delivery.orderId}`);
-    revalidatePath("/dashboard");
+    revalidateOperational([`/orders/${delivery.orderId}`, "/delivery", "/driver"]);
     return null;
   });
 }

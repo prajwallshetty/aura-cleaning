@@ -27,6 +27,8 @@ interface ConfirmDialogProps {
   destructive?: boolean;
   successMessage?: string;
   action: () => Promise<ActionResult<unknown>>;
+  /** Runs after the action succeeds — navigate, refresh, close a parent. */
+  onDone?: () => void;
 }
 
 /** Wraps a destructive server action in a confirmation step plus a toast. */
@@ -39,6 +41,7 @@ export function ConfirmDialog({
   destructive,
   successMessage,
   action,
+  onDone,
 }: ConfirmDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -49,6 +52,7 @@ export function ConfirmDialog({
       if (result.ok) {
         toast.success(successMessage ?? "Done");
         setOpen(false);
+        onDone?.();
       } else {
         toast.error(result.error);
       }

@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Pencil, UserPlus } from "lucide-react";
+import { Pencil, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -26,7 +26,13 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "@/components/shared/form-field";
 
-import { createCustomerAction, updateCustomerAction } from "./actions";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+
+import {
+  createCustomerAction,
+  deleteCustomerAction,
+  updateCustomerAction,
+} from "./actions";
 
 interface Fields {
   name: string;
@@ -168,6 +174,43 @@ export function NewCustomerDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Removing a customer. One with orders is retired rather than destroyed — the
+ * orders carry the billing snapshot and deleting the row would orphan history.
+ */
+export function DeleteCustomerButton({
+  customerId,
+  name,
+  orderCount,
+}: {
+  customerId: string;
+  name: string;
+  orderCount: number;
+}) {
+  const router = useRouter();
+
+  return (
+    <ConfirmDialog
+      trigger={
+        <Button variant="outline" className="text-destructive hover:bg-destructive/10">
+          <Trash2 /> {orderCount > 0 ? "Retire" : "Delete"}
+        </Button>
+      }
+      title={orderCount > 0 ? `Retire ${name}?` : `Delete ${name}?`}
+      description={
+        orderCount > 0
+          ? `${name} has ${orderCount} order${orderCount === 1 ? "" : "s"}, so the record is kept and taken out of the pickers instead. Every order stays exactly as it is.`
+          : "This customer has never placed an order, so the record is removed outright."
+      }
+      confirmLabel={orderCount > 0 ? "Retire customer" : "Delete customer"}
+      destructive
+      successMessage={orderCount > 0 ? `${name} retired` : `${name} deleted`}
+      action={() => deleteCustomerAction({ customerId })}
+      onDone={() => router.push("/customers")}
+    />
   );
 }
 

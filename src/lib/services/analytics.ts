@@ -4,6 +4,9 @@ import { num, round2 } from "@/lib/money";
 import { hoursBetween, todayRange, type DateRange } from "@/lib/dates";
 import { PROCESSING_ORDER_STATUSES } from "@/lib/workflow";
 import type { Prisma } from "@/generated/prisma/client";
+import { GARMENT_CATEGORIES, categoryLabel } from "@/lib/garment-categories";
+import { MISMATCH_LABELS, detectMismatches } from "@/lib/services/garment-tracking";
+import { STAGE_LABELS } from "@/lib/workflow";
 
 export interface DashboardFilters {
   branchId?: string;
@@ -597,4 +600,148 @@ export async function stagePipeline(branchId?: string) {
   }
 
   return [...byStage.entries()].map(([stage, counts]) => ({ stage, ...counts }));
+}
+
+export interface GarmentReport {
+  totalOnFloor: number;
+  delivered: number;
+  categories: Array<{
+    category: string;
+    label: string;
+    emoji: string;
+    onFloor: number;
+    ready: number;
+    delivered: number;
+    issues: number;
+  }>;
+  mismatches: Array<{ kind: string; label: string; count: number }>;
+  missing: Array<{
+    garmentCode: string;
+    categoryLabel: string;
+    orderNumber: string;
+    customerName: string;
+    detail: string;
+    reportedAt: Date | null;
+  }>;
+  scanned: { total: number; clean: number; problems: number };
+  busiestStations: Array<{ stage: string; label: string; scans: number }>;
+}
+
+/**
+ * The garment side of reporting: what is in the building by category, how the
+ * scanning is actually going, and every piece currently unaccounted for. All of
+ * it derived from the same engine the mismatch centre uses, so a report and the
+ * screen it summarises can never tell different stories.
+ */
+export async function garmentReport(filters: DashboardFilters): Promise<GarmentReport> {
+  const branchIds = filters.branchId ? [filters.branchId] : null;
+  const branchWhere = filters.branchId ? { branchId: filters.branchId } : {};
+  const window = filters.range
+    ? { gte: filters.range.from, lte: filters.range.to }
+    : undefined;
+
+  const [onFloor, ready, delivered, findings, scans, missingRows] = await Promise.all([
+    prisma.garment.groupBy({
+      by: ["trackingCategory"],
+      where: { ...branchWhere, status: { notIn: ["DELIVERED", "RETURNED"] } },
+      _count: { _all: true },
+    }),
+    prisma.garment.groupBy({
+      by: ["trackingCategory"],
+      where: { ...branchWhere, status: "READY" },
+      _count: { _all: true },
+    }),
+    prisma.garment.groupBy({
+      by: ["trackingCategory"],
+      where: {
+        ...branchWhere,
+        status: "DELIVERED",
+        ...(window ? { deliveredAt: window } : {}),
+      },
+      _count: { _all: true },
+    }),
+    detectMismatches({ branchIds }),
+    prisma.garmentScan.groupBy({
+      by: ["stage", "outcome"],
+      where: { ...branchWhere, ...(window ? { scannedAt: window } : {}) },
+      _count: { _all: true },
+    }),
+    prisma.garmentException.findMany({
+      where: { ...branchWhere, type: "MISSING", status: "OPEN" },
+      orderBy: { reportedAt: "desc" },
+      take: 25,
+      select: {
+        detail: true,
+        reportedAt: true,
+        garment: {
+          select: {
+            garmentCode: true,
+            trackingCategory: true,
+            order: { select: { orderNumber: true, customerName: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const floorBy = new Map(onFloor.map((row) => [row.trackingCategory, row._count._all]));
+  const readyBy = new Map(ready.map((row) => [row.trackingCategory, row._count._all]));
+  const deliveredBy = new Map(delivered.map((row) => [row.trackingCategory, row._count._all]));
+
+  const issuesBy = new Map<string, number>();
+  const kindCounts = new Map<string, number>();
+  for (const finding of findings) {
+    issuesBy.set(finding.category, (issuesBy.get(finding.category) ?? 0) + 1);
+    kindCounts.set(finding.kind, (kindCounts.get(finding.kind) ?? 0) + 1);
+  }
+
+  const byStation = new Map<string, number>();
+  let cleanScans = 0;
+  let problemScans = 0;
+  for (const row of scans) {
+    byStation.set(row.stage, (byStation.get(row.stage) ?? 0) + row._count._all);
+    if (row.outcome === "MATCH") cleanScans += row._count._all;
+    else problemScans += row._count._all;
+  }
+
+  return {
+    totalOnFloor: [...floorBy.values()].reduce((sum, count) => sum + count, 0),
+    delivered: [...deliveredBy.values()].reduce((sum, count) => sum + count, 0),
+    categories: GARMENT_CATEGORIES.map((meta) => ({
+      category: meta.value,
+      label: meta.label,
+      emoji: meta.emoji,
+      onFloor: floorBy.get(meta.value) ?? 0,
+      ready: readyBy.get(meta.value) ?? 0,
+      delivered: deliveredBy.get(meta.value) ?? 0,
+      issues: issuesBy.get(meta.value) ?? 0,
+    })).filter((row) => row.onFloor + row.delivered > 0),
+    mismatches: (Object.keys(MISMATCH_LABELS) as Array<keyof typeof MISMATCH_LABELS>).map(
+      (kind) => ({
+        kind,
+        label: MISMATCH_LABELS[kind],
+        count: kindCounts.get(kind) ?? 0,
+      }),
+    ),
+    missing: missingRows.map((row) => ({
+      garmentCode: row.garment.garmentCode,
+      categoryLabel: categoryLabel(row.garment.trackingCategory),
+      orderNumber: row.garment.order.orderNumber,
+      customerName: row.garment.order.customerName,
+      detail: row.detail ?? "Reported missing",
+      reportedAt: row.reportedAt,
+    })),
+    scanned: {
+      total: cleanScans + problemScans,
+      clean: cleanScans,
+      problems: problemScans,
+    },
+    busiestStations: [...byStation.entries()]
+      .map(([stage, count]) => ({
+        stage,
+        label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? stage,
+        scans: count,
+      }))
+      .sort((a, b) => b.scans - a.scans),
+  };
 }

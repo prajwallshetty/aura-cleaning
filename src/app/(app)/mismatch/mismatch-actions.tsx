@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { signalDataChange } from "@/components/shared/live-refresh";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -75,6 +77,7 @@ export function MismatchActions({
       if (result.ok) {
         toast.success(success);
         after?.();
+        signalDataChange();
         router.refresh();
       } else {
         toast.error(result.error ?? "That did not work");
@@ -115,7 +118,12 @@ export function MismatchActions({
       ) : null}
 
       {canReassign ? (
-        <Button size="sm" variant="outline" disabled={pending} onClick={() => setCorrectOpen(true)}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() => setCorrectOpen(true)}
+        >
           <ArrowRightLeft /> Correct order
         </Button>
       ) : null}
@@ -137,7 +145,10 @@ export function MismatchActions({
           variant="ghost"
           disabled={pending}
           onClick={() =>
-            run(() => dismissMismatchAction({ garmentId }), `${garmentCode} cleared`)
+            run(
+              () => dismissMismatchAction({ garmentId }),
+              `${garmentCode} cleared`,
+            )
           }
         >
           <Check /> No action needed
@@ -155,8 +166,8 @@ export function MismatchActions({
           <DialogHeader>
             <DialogTitle>Move {garmentCode} to another order</DialogTitle>
             <DialogDescription>
-              It is currently on {orderNumber}. Its scans and history travel with it; both
-              orders have their piece counts re-derived.
+              It is currently on {orderNumber}. Its scans and history travel
+              with it; both orders have their piece counts re-derived.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -177,7 +188,11 @@ export function MismatchActions({
               disabled={pending || targetOrder.trim().length < 3}
               onClick={() =>
                 run(
-                  () => correctOrderAction({ garmentId, orderNumber: targetOrder.trim() }),
+                  () =>
+                    correctOrderAction({
+                      garmentId,
+                      orderNumber: targetOrder.trim(),
+                    }),
                   `${garmentCode} reassigned`,
                   () => {
                     setCorrectOpen(false);
@@ -197,8 +212,8 @@ export function MismatchActions({
           <DialogHeader>
             <DialogTitle>Report {garmentCode} missing</DialogTitle>
             <DialogDescription>
-              This marks the piece lost on {orderNumber} and keeps it on the mismatch
-              centre until someone finds it or closes the case.
+              This marks the piece lost on {orderNumber} and keeps it on the
+              mismatch centre until someone finds it or closes the case.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -218,7 +233,11 @@ export function MismatchActions({
               disabled={pending}
               onClick={() =>
                 run(
-                  () => reportMissingAction({ garmentId, detail: detail || undefined }),
+                  () =>
+                    reportMissingAction({
+                      garmentId,
+                      detail: detail || undefined,
+                    }),
                   `${garmentCode} reported missing`,
                   () => {
                     setMissingOpen(false);

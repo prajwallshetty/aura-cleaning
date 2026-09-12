@@ -29,7 +29,7 @@ export function Sidebar({ permissions, isDriver, open, onClose }: SidebarProps) 
     <>
       {open ? (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="animate-fade-in-soft fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
           onClick={onClose}
           aria-hidden
         />
@@ -37,7 +37,7 @@ export function Sidebar({ permissions, isDriver, open, onClose }: SidebarProps) 
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
@@ -110,13 +110,22 @@ function NavGroup({
               onClick={onNavigate}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+                "group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-[background-color,color,padding] duration-200",
                 active
                   ? "bg-sidebar-accent font-medium text-sidebar-foreground"
-                  : "text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                  : "text-sidebar-muted hover:bg-sidebar-accent/60 hover:pl-4 hover:text-sidebar-foreground",
               )}
             >
-              <item.icon className="size-4 shrink-0" aria-hidden />
+              {active ? (
+                <span
+                  className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary"
+                  aria-hidden
+                />
+              ) : null}
+              <item.icon
+                className="size-4 shrink-0 transition-transform duration-200 group-hover:scale-110"
+                aria-hidden
+              />
               <span className="truncate">{item.label}</span>
             </Link>
           </li>

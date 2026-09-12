@@ -23,7 +23,7 @@ const DOT_COLORS: Record<BadgeTone, string> = {
 export function StatusBadge({ status, label, tone, className, dot }: StatusBadgeProps) {
   const resolvedTone = tone ?? toneFor(status);
   return (
-    <Badge tone={resolvedTone} className={cn("gap-1.5", className)}>
+    <Badge data-slot="status-badge" tone={resolvedTone} className={cn("gap-1.5", className)}>
       {dot ? (
         <span
           className={cn("size-1.5 rounded-full", DOT_COLORS[resolvedTone])}

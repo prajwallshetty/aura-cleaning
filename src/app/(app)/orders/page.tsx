@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { Pagination } from "@/components/shared/pagination";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -266,6 +267,7 @@ export default async function OrdersPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={30000} />
       <PageHeader
         title="Orders"
         description="Every order booked across the business, from intake to delivery."

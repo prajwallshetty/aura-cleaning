@@ -3,6 +3,7 @@ import { ArrowRight, Package } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { prisma } from "@/lib/prisma";
@@ -52,6 +53,7 @@ export default async function ProcessingPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={15000} />
       <PageHeader
         title="Processing"
         description="Every workstation on the floor. Scan a garment, press one button, move on."

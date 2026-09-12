@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { hasPermission } from "@/lib/session";
 import { OverviewDashboard } from "@/app/(overview)/overview/overview-dashboard";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 
 export const metadata = {
   title: "Overview",
@@ -14,12 +15,15 @@ export default async function OverviewPage() {
   const data = await getOverviewData(user);
 
   return (
-    <OverviewDashboard
-      data={data}
-      canSeeRevenue={hasPermission(user, [
-        PERMISSIONS.DASHBOARD_VIEW_FINANCIALS,
-        PERMISSIONS.BILLING_VIEW,
-      ])}
-    />
+    <>
+      <LiveRefresh intervalMs={20000} />
+      <OverviewDashboard
+        data={data}
+        canSeeRevenue={hasPermission(user, [
+          PERMISSIONS.DASHBOARD_VIEW_FINANCIALS,
+          PERMISSIONS.BILLING_VIEW,
+        ])}
+      />
+    </>
   );
 }

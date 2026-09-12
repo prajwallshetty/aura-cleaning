@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -389,6 +390,7 @@ export default async function DeliveryPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={30000} />
       <PageHeader
         title="Pickup & delivery"
         description="Collection runs, dispatch and door-step payment in one place."

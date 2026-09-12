@@ -1,4 +1,6 @@
 import Link from "next/link";
+
+import { MoveGarmentDialog, type SlotOption } from "@/app/(app)/racks/move-garment";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Warehouse } from "lucide-react";
 
@@ -53,6 +55,30 @@ export default async function RackDetailPage({
 
   if (!rack) notFound();
   assertBranchAccess(user, rack.branchId);
+
+  const canAssign = hasPermission(user, PERMISSIONS.RACK_ASSIGN);
+
+  // Every slot in the branch with room in it, so a garment can be moved to
+  // another rack and not only another slot on this one.
+  const slotOptions: SlotOption[] = canAssign
+    ? (
+        await prisma.rackSlot.findMany({
+          where: { isActive: true, rack: { branchId: rack.branchId } },
+          orderBy: [{ rack: { code: "asc" } }, { code: "asc" }],
+          select: {
+            id: true,
+            code: true,
+            capacity: true,
+            rack: { select: { code: true } },
+            _count: { select: { garments: true } },
+          },
+        })
+      ).map((slot) => ({
+        id: slot.id,
+        label: `${slot.rack.code}-${slot.code}`,
+        free: Math.max(0, slot.capacity - slot._count.garments),
+      }))
+    : [];
 
   const selectedSlotId = param(query, "slot") ?? rack.slots[0]?.id;
   const selectedSlot = rack.slots.find((slot) => slot.id === selectedSlotId);
@@ -123,6 +149,23 @@ export default async function RackDetailPage({
         <span className="text-sm text-muted-foreground">{formatDateTime(row.since)}</span>
       ),
     },
+    ...(canAssign
+      ? [
+          {
+            key: "move",
+            header: "",
+            className: "text-right",
+            cell: (row: SlotGarmentRow) => (
+              <MoveGarmentDialog
+                garmentId={row.id}
+                garmentCode={row.garmentCode}
+                currentSlotLabel={`${rack.code}-${selectedSlot?.code ?? ""}`}
+                slots={slotOptions}
+              />
+            ),
+          } satisfies Column<SlotGarmentRow>,
+        ]
+      : []),
   ];
 
   const nextSlotNumber = rack.slots.length + 1;

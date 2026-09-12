@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Ban, ChevronDown, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
+import { signalDataChange } from "@/components/shared/live-refresh";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,6 +69,7 @@ export function OrderActions({
       const result = await setOrderStatusAction({ orderId, status: next });
       if (result.ok) {
         toast.success(`${orderNumber} moved to ${humanize(next)}`);
+        signalDataChange();
         router.refresh();
       } else {
         toast.error(result.error);
@@ -125,11 +128,17 @@ export function OrderActions({
                 loading={isPending}
                 onClick={() =>
                   startTransition(async () => {
-                    const result = await rewashOrderAction(orderId, rewashReason);
+                    const result = await rewashOrderAction(
+                      orderId,
+                      rewashReason,
+                    );
                     if (result.ok) {
-                      toast.success(`${result.data.count} garments queued for rewash`);
+                      toast.success(
+                        `${result.data.count} garments queued for rewash`,
+                      );
                       setRewashOpen(false);
                       setRewashReason("");
+                      signalDataChange();
                       router.refresh();
                     } else {
                       toast.error(result.error);
@@ -179,7 +188,9 @@ export function OrderActions({
                     step="0.01"
                     value={refundAmount}
                     onChange={(event) =>
-                      setRefundAmount(Math.max(0, Number(event.target.value) || 0))
+                      setRefundAmount(
+                        Math.max(0, Number(event.target.value) || 0),
+                      )
                     }
                   />
                 </FormField>
@@ -202,6 +213,7 @@ export function OrderActions({
                     if (result.ok) {
                       toast.success(`${orderNumber} cancelled`);
                       setCancelOpen(false);
+                      signalDataChange();
                       router.refresh();
                     } else {
                       toast.error(result.error);

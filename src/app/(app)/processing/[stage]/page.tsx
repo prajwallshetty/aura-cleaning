@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Workstation, type QueueItem } from "@/app/(app)/processing/[stage]/workstation";
@@ -180,6 +181,7 @@ export default async function WorkstationPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={15000} />
       <PageHeader
         title={`${STAGE_LABELS[stage]} station`}
         description="Scan garments in, choose an outcome, and the pipeline advances itself."

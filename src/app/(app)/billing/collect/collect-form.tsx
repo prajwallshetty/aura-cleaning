@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Banknote, QrCode as QrIcon } from "lucide-react";
 import { toast } from "sonner";
 
+import { signalDataChange } from "@/components/shared/live-refresh";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -65,6 +67,7 @@ export function CollectForm({
           `${result.data.paymentNumber} recorded — ${formatCurrency(result.data.outstanding)} still outstanding`,
         );
         router.push(`/orders/${orderId}`);
+        signalDataChange();
         router.refresh();
       } else {
         toast.error(result.error);
@@ -95,7 +98,11 @@ export function CollectForm({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField label="Amount ₹" required hint={`Outstanding ${formatCurrency(outstanding)}`}>
+            <FormField
+              label="Amount ₹"
+              required
+              hint={`Outstanding ${formatCurrency(outstanding)}`}
+            >
               <Input
                 type="number"
                 min={0}
@@ -111,7 +118,9 @@ export function CollectForm({
 
             <FormField label="Method" required>
               <Select value={method} onValueChange={setMethod}>
-                <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-12">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CASH">Cash</SelectItem>
                   <SelectItem value="UPI">UPI</SelectItem>
@@ -123,7 +132,10 @@ export function CollectForm({
               </Select>
             </FormField>
 
-            <FormField label="Reference" hint="UPI transaction id, card auth code…">
+            <FormField
+              label="Reference"
+              hint="UPI transaction id, card auth code…"
+            >
               <Input
                 value={reference}
                 onChange={(event) => setReference(event.target.value)}
@@ -131,7 +143,10 @@ export function CollectForm({
             </FormField>
 
             <FormField label="Notes">
-              <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+              <Textarea
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
             </FormField>
           </div>
 
@@ -142,13 +157,20 @@ export function CollectForm({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setAmount(Math.round(outstanding * fraction * 100) / 100)}
+                onClick={() =>
+                  setAmount(Math.round(outstanding * fraction * 100) / 100)
+                }
               >
                 {fraction === 1 ? "Full balance" : `${fraction * 100}%`}
               </Button>
             ))}
             {method === "UPI" ? (
-              <Button type="button" variant="outline" size="sm" onClick={showUpiQr}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={showUpiQr}
+              >
                 <QrIcon /> Show UPI QR
               </Button>
             ) : null}
@@ -158,8 +180,8 @@ export function CollectForm({
             <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-muted/30 p-4">
               <QrCode value={upiUri} size={180} />
               <p className="text-sm text-muted-foreground">
-                Ask the customer to scan and pay {formatCurrency(amount)}, then record
-                it below.
+                Ask the customer to scan and pay {formatCurrency(amount)}, then
+                record it below.
               </p>
             </div>
           ) : null}
@@ -190,7 +212,9 @@ export function CollectForm({
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Already paid</dt>
-              <dd className="numeric text-success">{formatCurrency(paidAmount)}</dd>
+              <dd className="numeric text-success">
+                {formatCurrency(paidAmount)}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-muted-foreground">Outstanding</dt>

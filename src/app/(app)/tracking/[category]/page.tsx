@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, ScanLine, Shapes } from "lucide-react";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { Pagination } from "@/components/shared/pagination";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -191,6 +192,7 @@ export default async function CategoryTrackingPage({
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={20000} />
       <PageHeader
         title={`${page.emoji} ${page.label} — ${summary.total}`}
         description={`Every ${page.label.toLowerCase().replace(/s$/, "")} in the laundry right now, with the order and customer it belongs to.`}

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateOperational } from "@/lib/revalidate";
+
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS, STAGE_PERMISSION } from "@/lib/rbac";
@@ -201,13 +203,7 @@ export async function advanceGarmentAction(
       after: { stage: input.stage, outcome: input.outcome, note: input.note },
     });
 
-    revalidatePath("/processing");
-    revalidatePath(`/garments/${result.garmentCode}`);
-    revalidatePath("/dashboard");
-
-    if (result.mismatchAlert) {
-      revalidatePath("/mismatch");
-    }
+    revalidateOperational([`/garments/${result.garmentCode}`]);
 
     return {
       garmentCode: result.garmentCode,
@@ -250,8 +246,7 @@ export async function bulkAdvanceAction(
       summary: `${succeeded.length} garments → ${input.outcome} at ${input.stage}${failed.length ? ` (${failed.length} failed)` : ""}`,
     });
 
-    revalidatePath("/processing");
-    revalidatePath("/dashboard");
+    revalidateOperational();
 
     return { succeeded: succeeded.length, failed };
   });
@@ -346,8 +341,7 @@ export async function markGarmentAction(payload: unknown): Promise<ActionResult<
       summary: `${garment.garmentCode} marked ${input.status.toLowerCase()}: ${input.note}`,
     });
 
-    revalidatePath(`/garments/${garment.garmentCode}`);
-    revalidatePath("/dashboard");
+    revalidateOperational([`/garments/${garment.garmentCode}`]);
     return null;
   });
 }
@@ -461,8 +455,7 @@ export async function assignSlotAction(payload: unknown): Promise<ActionResult<{
       summary: `${moved} garments filed to ${slot.rack.code} · ${slot.code}`,
     });
 
-    revalidatePath("/racks");
-    revalidatePath("/orders");
+    revalidateOperational();
     return { moved };
   });
 }

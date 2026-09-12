@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { signalDataChange } from "@/components/shared/live-refresh";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -27,7 +29,10 @@ import { Scanner } from "@/components/shared/scanner";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "@/lib/utils";
-import { bulkAdvanceAction, scanForStageAction } from "@/app/(app)/garments/actions";
+import {
+  bulkAdvanceAction,
+  scanForStageAction,
+} from "@/app/(app)/garments/actions";
 
 export interface QueueItem {
   taskId: string;
@@ -54,7 +59,11 @@ interface WorkstationProps {
   stage: string;
   stageLabel: string;
   items: QueueItem[];
-  outcomes: { value: string; label: string; tone: "default" | "success" | "destructive" | "warning" }[];
+  outcomes: {
+    value: string;
+    label: string;
+    tone: "default" | "success" | "destructive" | "warning";
+  }[];
   slots: SlotOption[];
   canOperate: boolean;
   /** Garments queued for this stage that are still finishing an earlier one. */
@@ -168,6 +177,7 @@ export function Workstation({
       setAlert(null);
       setSelected(new Set());
       setNote("");
+      signalDataChange();
       router.refresh();
     });
   };
@@ -344,18 +354,24 @@ export function Workstation({
                             <span className="font-mono text-sm font-semibold">
                               {item.garmentCode}
                             </span>
-                            <span className="truncate text-sm">{item.typeName}</span>
+                            <span className="truncate text-sm">
+                              {item.typeName}
+                            </span>
                             <StatusBadge status={item.taskStatus} />
                             {item.priority !== "NORMAL" ? (
                               <StatusBadge status={item.priority} />
                             ) : null}
                             {item.isDelayed ? (
-                              <StatusBadge status="LATE" tone="danger" label="Late" />
+                              <StatusBadge
+                                status="LATE"
+                                tone="danger"
+                                label="Late"
+                              />
                             ) : null}
                           </div>
                           <p className="truncate text-xs text-muted-foreground">
-                            {item.orderNumber} · {item.customerName} · {item.serviceName} ·
-                            due {item.dueAt}
+                            {item.orderNumber} · {item.customerName} ·{" "}
+                            {item.serviceName} · due {item.dueAt}
                           </p>
                         </button>
 

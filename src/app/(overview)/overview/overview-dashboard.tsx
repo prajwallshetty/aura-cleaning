@@ -26,6 +26,7 @@ import {
   Wallet,
 } from "lucide-react";
 
+import { CountUp } from "@/components/shared/count-up";
 import { formatCompactCurrency, formatCurrency } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { OverviewData, ScheduleEntry } from "@/lib/services/overview";
@@ -218,9 +219,7 @@ export function OverviewDashboard({
         : METRIC_TILES
       ).map((tile) => ({
         ...tile,
-        value: tile.money
-          ? formatCompactCurrency(data.metrics[tile.key])
-          : data.metrics[tile.key].toLocaleString("en-IN"),
+        amount: data.metrics[tile.key],
         hidden: tile.money && !canSeeRevenue,
       })),
     [needle, data.metrics, canSeeRevenue],
@@ -646,7 +645,8 @@ function MetricStrip({
     key: string;
     label: string;
     href: string;
-    value: string;
+    amount: number;
+    money: boolean;
     hidden: boolean;
   }>;
   filtered: boolean;
@@ -664,19 +664,22 @@ function MetricStrip({
   return (
     <section
       aria-label="Today at a glance"
-      className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+      className="stagger mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
     >
       {visible.map((tile) => (
         <Link
           key={tile.key}
           href={tile.href}
-          className="group rounded-[14px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-22px_rgba(16,24,40,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_8px_20px_-10px_rgba(16,24,40,0.3)]"
+          className="lift press group rounded-[14px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.04),0_10px_28px_-22px_rgba(16,24,40,0.28)]"
         >
           <span className="block truncate text-[10.5px] uppercase tracking-[0.06em] text-[#9aa0b1]">
             {tile.label}
           </span>
           <span className="mt-0.5 block truncate text-[19px] font-semibold leading-tight tracking-[-0.01em] text-[#1b2136]">
-            {tile.value}
+            <CountUp
+              value={tile.amount}
+              format={tile.money ? (value) => formatCompactCurrency(value) : undefined}
+            />
           </span>
         </Link>
       ))}
@@ -728,12 +731,12 @@ function CategoryStrip({
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="stagger grid grid-cols-2 gap-2 sm:grid-cols-4">
         {categories.map((row) => (
           <Link
             key={row.category}
             href={`/tracking/${row.category.toLowerCase()}`}
-            className="group relative flex items-center gap-2.5 rounded-[12px] border border-[#eceef4] px-3 py-2.5 transition hover:-translate-y-0.5 hover:border-transparent hover:shadow-[0_8px_20px_-12px_rgba(16,24,40,0.4)]"
+            className="lift press group relative flex items-center gap-2.5 rounded-[12px] border border-[#eceef4] px-3 py-2.5 hover:border-transparent"
           >
             <span className="text-lg leading-none" aria-hidden>
               {row.emoji}
@@ -743,12 +746,12 @@ function CategoryStrip({
                 {row.label}
               </span>
               <span className="block text-[17px] font-semibold leading-tight text-[#1b2136]">
-                {row.onFloor}
+                <CountUp value={row.onFloor} />
               </span>
             </span>
             {row.issues > 0 ? (
               <span
-                className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[#eb6834] text-[10px] font-semibold text-white"
+                className="animate-pop flex size-[18px] shrink-0 items-center justify-center rounded-full bg-[#eb6834] text-[10px] font-semibold text-white"
                 title={`${row.issues} need attention`}
               >
                 {row.issues}

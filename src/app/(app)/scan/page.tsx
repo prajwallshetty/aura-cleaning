@@ -29,6 +29,7 @@ export default async function ScanPage() {
         history={history}
         canUpdateStatus={hasPermission(user, PERMISSIONS.ORDER_UPDATE)}
         canTakePayment={hasPermission(user, PERMISSIONS.BILLING_RECORD_PAYMENT)}
+        canMove={hasPermission(user, PERMISSIONS.RACK_ASSIGN)}
       />
     </div>
   );

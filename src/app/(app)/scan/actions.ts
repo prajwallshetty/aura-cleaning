@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -73,7 +75,7 @@ export async function scanTagAction(payload: unknown): Promise<ActionResult<Scan
           await prisma.garmentScan.create({
             data: {
               garmentId: outcome.wrongOrder.garmentId,
-              orderId: outcome.wrongOrder.belongsToOrderId,
+              orderId: outcome.wrongOrder.actual.orderId,
               contextOrderId: input.contextOrderId,
               branchId: garment.branchId,
               trackingCategory: garment.trackingCategory,
@@ -83,8 +85,7 @@ export async function scanTagAction(payload: unknown): Promise<ActionResult<Scan
               scannedById: user.id,
             },
           });
-          revalidatePath("/mismatch");
-          revalidatePath("/tracking");
+          revalidateOperational();
         } catch {
           // A cross-branch tag is refused below; nothing to log here.
         }
@@ -224,10 +225,7 @@ export async function scanStatusAction(
       summary: `${order.orderNumber}: ${order.status} → ${input.status} (scan station)`,
     });
 
-    revalidatePath("/scan");
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/orders");
-    revalidatePath("/overview");
+    revalidateOperational([`/orders/${order.id}`]);
     return { status: input.status };
   });
 }
@@ -338,9 +336,8 @@ export async function scanPaymentAction(
       summary: `${formatCurrency(input.amount)} on ${order.orderNumber} via ${input.method} (scan station)`,
     });
 
-    revalidatePath("/scan");
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/billing");
+    revalidateOperational([`/orders/${order.id}`]);
+    revalidateMoney();
     return result;
   });
 }

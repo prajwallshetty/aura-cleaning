@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, PackageCheck, Shapes } from "lucide-react";
 
+import { LiveRefresh } from "@/components/shared/live-refresh";
 import { PageHeader } from "@/components/shared/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +27,7 @@ export default async function TrackingPage() {
 
   return (
     <div className="space-y-5">
+      <LiveRefresh intervalMs={20000} />
       <PageHeader
         title="Garment categories"
         description={`${onFloor} pieces in the laundry right now. Open a category to see every piece in it and where it is.`}

@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+
+import { revalidateOperational } from "@/lib/revalidate";
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
@@ -90,8 +92,7 @@ export async function reportMissingAction(payload: unknown): Promise<ActionResul
       summary: `${garment.garmentCode} on ${garment.order.orderNumber} reported missing`,
     });
 
-    revalidatePath("/mismatch");
-    revalidatePath("/tracking");
+    revalidateOperational();
     return null;
   });
 }
@@ -189,8 +190,7 @@ export async function rescanGarmentAction(payload: unknown): Promise<ActionResul
       summary: `${garment.garmentCode} re-scanned at ${garment.currentStage}`,
     });
 
-    revalidatePath("/mismatch");
-    revalidatePath("/tracking");
+    revalidateOperational();
     return null;
   });
 }
@@ -250,8 +250,7 @@ export async function moveGarmentAction(payload: unknown): Promise<ActionResult<
       summary: `${garment.garmentCode} moved to ${slot.rack.code}-${slot.code}`,
     });
 
-    revalidatePath("/mismatch");
-    revalidatePath("/tracking");
+    revalidateOperational();
     return null;
   });
 }
@@ -343,10 +342,7 @@ export async function correctOrderAction(payload: unknown): Promise<ActionResult
       summary: `${garment.garmentCode} moved from ${garment.order.orderNumber} to ${target.orderNumber}`,
     });
 
-    revalidatePath("/mismatch");
-    revalidatePath("/tracking");
-    revalidatePath(`/orders/${previousOrderId}`);
-    revalidatePath(`/orders/${target.id}`);
+    revalidateOperational([`/orders/${previousOrderId}`, `/orders/${target.id}`]);
     return null;
   });
 }
@@ -372,7 +368,7 @@ export async function dismissMismatchAction(payload: unknown): Promise<ActionRes
       },
     });
 
-    revalidatePath("/mismatch");
+    revalidateOperational();
     return null;
   });
 }

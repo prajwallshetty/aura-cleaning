@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
+
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -126,9 +128,8 @@ export async function recordPaymentAction(
       },
     });
 
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/billing");
-    revalidatePath("/dashboard");
+    revalidateOperational([`/orders/${order.id}`]);
+    revalidateMoney();
 
     return { paymentNumber: payment.paymentNumber, outstanding: newOutstanding };
   });
@@ -215,8 +216,7 @@ export async function refundAction(
       summary: `${formatCurrency(input.amount)} refunded on ${order.orderNumber}: ${input.reason}`,
     });
 
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/billing");
+    revalidateMoney([`/orders/${order.id}`]);
     return { refundNumber: refund.refundNumber };
   });
 }
@@ -353,8 +353,7 @@ export async function verifyOnlinePaymentAction(
       summary: `${formatCurrency(input.amount)} captured online for ${order.orderNumber}`,
     });
 
-    revalidatePath(`/orders/${order.id}`);
-    revalidatePath("/billing");
+    revalidateMoney([`/orders/${order.id}`]);
     return { paymentNumber: payment.paymentNumber };
   });
 }
@@ -409,7 +408,7 @@ export async function sendPaymentRemindersAction(): Promise<ActionResult<{ sent:
       summary: `${orders.length} payment reminders dispatched`,
     });
 
-    revalidatePath("/billing");
+    revalidateMoney();
     return { sent: orders.length };
   });
 }

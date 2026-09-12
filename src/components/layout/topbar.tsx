@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Menu, ScanLine } from "lucide-react";
+import { Menu, ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/layout/global-search";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { UserMenu } from "@/components/layout/user-menu";
-import { Badge } from "@/components/ui/badge";
+import type { Alert } from "@/lib/services/alerts";
 import type { UserRole } from "@/generated/prisma/enums";
 
 interface TopbarProps {
@@ -14,7 +15,7 @@ interface TopbarProps {
   email: string;
   role: UserRole;
   branchName: string | null;
-  openComplaints: number;
+  alerts: { alerts: Alert[]; total: number };
   canScan: boolean;
   onOpenSidebar: () => void;
 }
@@ -24,7 +25,7 @@ export function Topbar({
   email,
   role,
   branchName,
-  openComplaints,
+  alerts,
   canScan,
   onOpenSidebar,
 }: TopbarProps) {
@@ -46,25 +47,13 @@ export function Topbar({
 
       {canScan ? (
         <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-          <Link href="/garments/scan">
+          <Link href="/scan">
             <ScanLine /> Scan
           </Link>
         </Button>
       ) : null}
 
-      <Button asChild variant="ghost" size="icon" className="relative">
-        <Link href="/complaints?status=OPEN" aria-label="Open complaints">
-          <Bell />
-          {openComplaints > 0 ? (
-            <Badge
-              tone="danger"
-              className="absolute -right-0.5 -top-0.5 h-4 min-w-4 justify-center px-1 text-[10px]"
-            >
-              {openComplaints > 99 ? "99+" : openComplaints}
-            </Badge>
-          ) : null}
-        </Link>
-      </Button>
+      <NotificationBell feed={alerts} />
 
       <UserMenu name={name} email={email} role={role} branchName={branchName} />
     </header>

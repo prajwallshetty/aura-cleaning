@@ -1,23 +1,12 @@
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { prisma } from "@/lib/prisma";
+import { getAlerts } from "@/lib/services/alerts";
 import { requireUser } from "@/lib/session";
-import { isGlobalRole } from "@/lib/rbac";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
-
-  const openComplaints = user.permissions.includes("complaints.view")
-    ? await prisma.complaint.count({
-        where: {
-          status: { in: ["OPEN", "UNDER_INVESTIGATION"] },
-          ...(isGlobalRole(user.role) || !user.branchId
-            ? {}
-            : { branchId: user.branchId }),
-        },
-      })
-    : 0;
+  const alerts = await getAlerts(user);
 
   return (
     <AppShell
@@ -28,7 +17,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         branchName: user.branchName,
         permissions: user.permissions,
       }}
-      openComplaints={openComplaints}
+      alerts={{ alerts: alerts.alerts, total: alerts.total }}
     >
       {children}
     </AppShell>

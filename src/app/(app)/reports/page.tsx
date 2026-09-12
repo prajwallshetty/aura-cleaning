@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download } from "lucide-react";
+import { Download, PackageCheck, ScanLine, ShieldAlert, Shirt } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +17,7 @@ import {
   branchPerformance,
   deliveryMetrics,
   financeMetrics,
+  garmentReport,
   operationsMetrics,
   revenueSeries,
   servicePerformance,
@@ -56,6 +57,7 @@ export default async function ReportsPage({
   const canFinance = hasPermission(user, PERMISSIONS.REPORT_FINANCE);
   const canExport = hasPermission(user, PERMISSIONS.REPORT_EXPORT);
   const canInventory = hasPermission(user, PERMISSIONS.INVENTORY_VIEW);
+  const canGarments = hasPermission(user, PERMISSIONS.TRACKING_VIEW);
 
   const [
     series,
@@ -68,6 +70,7 @@ export default async function ReportsPage({
     stockMovement,
     purchaseHistory,
     branches,
+    garments,
   ] = await Promise.all([
     canSales ? revenueSeries(filters) : Promise.resolve([]),
     canSales ? servicePerformance(filters) : Promise.resolve([]),
@@ -101,6 +104,7 @@ export default async function ReportsPage({
         })
       : Promise.resolve([]),
     branchOptions(user),
+    canGarments ? garmentReport(filters) : Promise.resolve(null),
   ]);
 
   const exportQuery = new URLSearchParams({
@@ -155,6 +159,11 @@ export default async function ReportsPage({
           {canInventory ? (
             <TabsTrigger value="inventory" asChild>
               <Link href="/reports?tab=inventory">Inventory</Link>
+            </TabsTrigger>
+          ) : null}
+          {canGarments ? (
+            <TabsTrigger value="garments" asChild>
+              <Link href="/reports?tab=garments">Garments</Link>
             </TabsTrigger>
           ) : null}
           {canFinance ? (

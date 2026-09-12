@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
+import { CountUp } from "@/components/shared/count-up";
 import { cn } from "@/lib/utils";
 
 interface StatCardProps {
@@ -14,6 +15,8 @@ interface StatCardProps {
   tone?: "default" | "success" | "warning" | "danger" | "info";
   delta?: { value: number; label?: string };
   className?: string;
+  /** Plain counts animate to their new figure; pre-formatted strings do not. */
+  animate?: boolean;
 }
 
 const TONES = {
@@ -33,12 +36,13 @@ export function StatCard({
   tone = "default",
   delta,
   className,
+  animate = true,
 }: StatCardProps) {
   const body = (
     <Card
       className={cn(
-        "flex h-full items-start gap-3 p-4 transition-shadow",
-        href && "hover:shadow-md",
+        "flex h-full items-start gap-3 p-4",
+        href && "lift cursor-pointer hover:border-primary/40",
         className,
       )}
     >
@@ -56,7 +60,9 @@ export function StatCard({
         <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </p>
-        <p className="truncate text-2xl font-semibold tracking-tight numeric">{value}</p>
+        <p className="truncate text-2xl font-semibold tracking-tight numeric">
+          {animate && typeof value === "number" ? <CountUp value={value} /> : value}
+        </p>
         {delta ? (
           <p
             className={cn(
@@ -78,7 +84,10 @@ export function StatCard({
   );
 
   return href ? (
-    <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+    <Link
+      href={href}
+      className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       {body}
     </Link>
   ) : (
