@@ -16,6 +16,7 @@ import {
   categorySlug,
 } from "@/lib/garment-categories";
 import { GarmentTools } from "@/app/(app)/garments/[code]/garment-tools";
+import type { SlotOption } from "@/app/(app)/racks/move-garment";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime, formatTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -93,6 +94,35 @@ export default async function GarmentDetailPage({
   if (!garment) notFound();
   assertBranchAccess(user, garment.branchId);
 
+  // The next station on this garment's own route, which is what "update
+  // status" advances it to.
+  const openTask = garment.tasks.find((task) =>
+    ["PENDING", "IN_PROGRESS"].includes(task.status),
+  );
+  const nextStage = openTask
+    ? { stage: openTask.stage, label: STAGE_LABELS[openTask.stage] }
+    : null;
+
+  const slotOptions: SlotOption[] = hasPermission(user, PERMISSIONS.RACK_ASSIGN)
+    ? (
+        await prisma.rackSlot.findMany({
+          where: { isActive: true, rack: { branchId: garment.branchId } },
+          orderBy: [{ rack: { code: "asc" } }, { code: "asc" }],
+          select: {
+            id: true,
+            code: true,
+            capacity: true,
+            rack: { select: { code: true } },
+            _count: { select: { garments: true } },
+          },
+        })
+      ).map((slot) => ({
+        id: slot.id,
+        label: `${slot.rack.code}-${slot.code}`,
+        free: Math.max(0, slot.capacity - slot._count.garments),
+      }))
+    : [];
+
   const statusTimeline: TimelineEntry[] = garment.statusHistory.map((entry) => ({
     id: entry.id,
     time: formatTime(entry.createdAt),
@@ -161,8 +191,20 @@ export default async function GarmentDetailPage({
             <GarmentTools
               garmentId={garment.id}
               garmentCode={garment.garmentCode}
+              orderId={garment.order.id}
+              currentStage={garment.currentStage}
+              nextStage={nextStage}
+              currentSlotLabel={
+                garment.rackSlot
+                  ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
+                  : "the floor"
+              }
+              slots={slotOptions}
               canEdit={hasPermission(user, PERMISSIONS.GARMENT_UPDATE)}
               canUpload={hasPermission(user, PERMISSIONS.GARMENT_PHOTO_UPLOAD)}
+              canAdvance={hasPermission(user, PERMISSIONS.PROCESSING_VIEW)}
+              canMove={hasPermission(user, PERMISSIONS.RACK_ASSIGN)}
+              canScan={hasPermission(user, PERMISSIONS.GARMENT_SCAN)}
               details={{
                 color: garment.color,
                 brand: garment.brand,

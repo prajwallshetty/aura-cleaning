@@ -2,7 +2,15 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ImagePlus, Pencil } from "lucide-react";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowRight,
+  ImagePlus,
+  Pencil,
+  Printer,
+  ScanLine,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -25,7 +33,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormField } from "@/components/shared/form-field";
+import { MoveGarmentDialog, type SlotOption } from "@/app/(app)/racks/move-garment";
+import { signalDataChange } from "@/components/shared/live-refresh";
+import { rescanGarmentAction } from "@/app/(app)/mismatch/actions";
 import {
+  advanceGarmentAction,
   markGarmentAction,
   updateGarmentAction,
   uploadGarmentPhotoAction,
@@ -34,8 +46,17 @@ import {
 interface GarmentToolsProps {
   garmentId: string;
   garmentCode: string;
+  orderId: string;
+  /** The station this piece is queued at, and the one after it. */
+  currentStage: string;
+  nextStage: { stage: string; label: string } | null;
+  currentSlotLabel: string;
+  slots: SlotOption[];
   canEdit: boolean;
   canUpload: boolean;
+  canAdvance: boolean;
+  canMove: boolean;
+  canScan: boolean;
   details: {
     color: string | null;
     brand: string | null;
@@ -49,8 +70,16 @@ interface GarmentToolsProps {
 export function GarmentTools({
   garmentId,
   garmentCode,
+  orderId,
+  currentStage,
+  nextStage,
+  currentSlotLabel,
+  slots,
   canEdit,
   canUpload,
+  canAdvance,
+  canMove,
+  canScan,
   details,
 }: GarmentToolsProps) {
   const router = useRouter();
@@ -80,8 +109,69 @@ export function GarmentTools({
     });
   };
 
+  /** Confirms the piece is where the system says, clearing any stale finding. */
+  const rescan = () =>
+    startTransition(async () => {
+      const result = await rescanGarmentAction({ garmentId });
+      if (result.ok) {
+        toast.success(`${garmentCode} confirmed by scan`);
+        signalDataChange();
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+
+  /** Moves the piece on to the next station on its own route. */
+  const advance = () => {
+    if (!nextStage) return;
+    startTransition(async () => {
+      const result = await advanceGarmentAction({
+        garmentId,
+        stage: currentStage,
+        outcome: "COMPLETED",
+        scannedVia: "garment page",
+      });
+      if (result.ok) {
+        toast.success(`${garmentCode} cleared ${currentStage.replace(/_/g, " ").toLowerCase()}`);
+        if (result.data.mismatchAlert) toast.error(result.data.mismatchAlert);
+        signalDataChange();
+        router.refresh();
+      } else {
+        toast.error(result.error);
+      }
+    });
+  };
+
   return (
     <div className="flex flex-wrap gap-2">
+      {canAdvance && nextStage ? (
+        <Button loading={isPending} onClick={advance}>
+          <ArrowRight /> Update status → {nextStage.label}
+        </Button>
+      ) : null}
+
+      {canScan ? (
+        <Button variant="outline" loading={isPending} onClick={rescan}>
+          <ScanLine /> Scan
+        </Button>
+      ) : null}
+
+      {canMove ? (
+        <MoveGarmentDialog
+          garmentId={garmentId}
+          garmentCode={garmentCode}
+          currentSlotLabel={currentSlotLabel}
+          slots={slots}
+        />
+      ) : null}
+
+      <Button asChild variant="outline">
+        <Link href={`/orders/${orderId}/tags`}>
+          <Printer /> Print tag
+        </Link>
+      </Button>
+
       {canUpload ? (
         <>
           <input

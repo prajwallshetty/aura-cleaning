@@ -2,7 +2,14 @@ import Link from "next/link";
 import { ClipboardList, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataTable, type Column } from "@/components/shared/data-table";
+import {
+  DataTable,
+  hiddenColumnsFrom,
+  toggleableColumns,
+  type Column,
+} from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
+import { ColumnToggle } from "@/components/shared/table-controls";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { LiveRefresh } from "@/components/shared/live-refresh";
@@ -200,6 +207,7 @@ export default async function OrdersPage({
       key: "location",
       header: "Rack",
       hideOnMobile: true,
+      toggleLabel: "Rack",
       cell: (row) =>
         row.slot ? (
           <span className="font-mono text-sm">{row.slot}</span>
@@ -211,6 +219,7 @@ export default async function OrdersPage({
       key: "placed",
       header: "Placed",
       hideOnMobile: true,
+      toggleLabel: "Placed",
       cell: (row) => (
         <span className="text-sm text-muted-foreground">
           {formatDateTime(row.placedAt)}
@@ -257,12 +266,28 @@ export default async function OrdersPage({
             key: "branch",
             header: "Branch",
             hideOnMobile: true,
+            toggleLabel: "Branch",
             cell: (row: OrderRow) => (
               <span className="text-sm text-muted-foreground">{row.branchName}</span>
             ),
           } satisfies Column<OrderRow>,
         ]
       : []),
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/orders/${row.id}`}
+          extra={[
+            { label: "Print tag", icon: "printer", href: `/orders/${row.id}/tags` },
+            { label: "Receipt", icon: "receipt", href: `/orders/${row.id}/receipt` },
+            { label: "Scan a tag", icon: "scan", href: "/scan" },
+          ]}
+        />
+      ),
+    },
   ];
 
   return (
@@ -347,8 +372,13 @@ export default async function OrdersPage({
         ]}
       />
 
+      <div className="flex justify-end">
+        <ColumnToggle columns={toggleableColumns(columns)} />
+      </div>
+
       <DataTable
         columns={columns}
+        hiddenColumns={hiddenColumnsFrom(param(params, "hide"))}
         rows={rows}
         getRowKey={(row) => row.id}
         rowClassName={(row) => (row.isDelayed ? "bg-destructive/4" : undefined)}

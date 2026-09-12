@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
+import { cuidSchema } from "@/lib/validations/common";
 import {
   assertBranchAccess,
   authorize,
@@ -512,6 +514,113 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
     });
 
     revalidateOperational([`/orders/${delivery.orderId}`, "/delivery", "/driver"]);
+    return null;
+  });
+}
+
+
+/**
+ * Calling off a run that is not going to happen.
+ *
+ * Deliveries and pickups are jobs, not documents: they are cancelled rather
+ * than deleted so the attempt stays visible on the order, and one that has
+ * already been completed cannot be undone this way.
+ */
+export async function cancelDeliveryAction(payload: unknown): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.DELIVERY_MANAGE);
+    const { deliveryId, reason } = z
+      .object({ deliveryId: cuidSchema, reason: z.string().trim().max(300).optional() })
+      .parse(payload);
+
+    const delivery = await prisma.delivery.findUnique({
+      where: { id: deliveryId },
+      select: {
+        id: true,
+        deliveryNumber: true,
+        branchId: true,
+        orderId: true,
+        status: true,
+      },
+    });
+    if (!delivery) throw new NotFoundError("Delivery not found");
+    assertBranchAccess(user, delivery.branchId);
+
+    if (delivery.status === "DELIVERED") {
+      throw new BusinessRuleError(
+        `${delivery.deliveryNumber} was completed — raise a return instead`,
+      );
+    }
+    if (delivery.status === "CANCELLED") {
+      throw new BusinessRuleError(`${delivery.deliveryNumber} is already cancelled`);
+    }
+
+    await prisma.delivery.update({
+      where: { id: deliveryId },
+      data: {
+        status: "CANCELLED",
+        failureReason: reason ?? "Cancelled at the branch",
+      },
+    });
+
+    await recordAudit({
+      userId: user.id,
+      branchId: delivery.branchId,
+      action: "DELIVERY_CANCELLED",
+      entity: "Delivery",
+      entityId: deliveryId,
+      summary: `${delivery.deliveryNumber} cancelled`,
+    });
+
+    revalidateOperational([`/orders/${delivery.orderId}`]);
+    return null;
+  });
+}
+
+export async function cancelPickupAction(payload: unknown): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.DELIVERY_MANAGE);
+    const { pickupId, reason } = z
+      .object({ pickupId: cuidSchema, reason: z.string().trim().max(300).optional() })
+      .parse(payload);
+
+    const pickup = await prisma.pickup.findUnique({
+      where: { id: pickupId },
+      select: {
+        id: true,
+        pickupNumber: true,
+        branchId: true,
+        orderId: true,
+        status: true,
+      },
+    });
+    if (!pickup) throw new NotFoundError("Pickup not found");
+    assertBranchAccess(user, pickup.branchId);
+
+    if (pickup.status === "RECEIVED_AT_LAUNDRY") {
+      throw new BusinessRuleError(
+        `${pickup.pickupNumber} has already been collected`,
+      );
+    }
+    if (pickup.status === "CANCELLED") {
+      throw new BusinessRuleError(`${pickup.pickupNumber} is already cancelled`);
+    }
+
+    await prisma.pickup.update({
+      where: { id: pickupId },
+      data: { status: "CANCELLED", notes: reason ?? "Cancelled at the branch" },
+    });
+
+    await recordAudit({
+      userId: user.id,
+      branchId: pickup.branchId,
+      action: "PICKUP_CANCELLED",
+      entity: "Pickup",
+      entityId: pickupId,
+      summary: `${pickup.pickupNumber} cancelled`,
+    });
+
+    revalidateOperational([`/orders/${pickup.orderId}`]);
     return null;
   });
 }

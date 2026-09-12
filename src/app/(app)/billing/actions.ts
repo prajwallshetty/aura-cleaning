@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { revalidateMoney, revalidateOperational } from "@/lib/revalidate";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
+import { cuidSchema } from "@/lib/validations/common";
 import { assertBranchAccess, authorize } from "@/lib/session";
 import {
   BusinessRuleError,
@@ -410,5 +412,82 @@ export async function sendPaymentRemindersAction(): Promise<ActionResult<{ sent:
 
     revalidateMoney();
     return { sent: orders.length };
+  });
+}
+
+
+/**
+ * Voiding a payment that should never have been recorded — a mistyped amount,
+ * a double entry at the counter.
+ *
+ * The row is not deleted: it is marked cancelled so the till still reconciles
+ * and the correction is visible. A payment that has been refunded is left
+ * alone, because the refund is already the record of what happened.
+ */
+export async function voidPaymentAction(
+  payload: unknown,
+): Promise<ActionResult<{ outstanding: number }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.BILLING_REFUND);
+    const { paymentId, reason } = z
+      .object({ paymentId: cuidSchema, reason: z.string().trim().max(300).optional() })
+      .parse(payload);
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      select: {
+        id: true,
+        paymentNumber: true,
+        branchId: true,
+        orderId: true,
+        amount: true,
+        state: true,
+        _count: { select: { refunds: true } },
+      },
+    });
+    if (!payment) throw new NotFoundError("Payment not found");
+    assertBranchAccess(user, payment.branchId);
+
+    if (payment.state !== "CAPTURED") {
+      throw new BusinessRuleError(
+        `${payment.paymentNumber} is ${payment.state.toLowerCase()} and cannot be voided`,
+      );
+    }
+    if (payment._count.refunds > 0) {
+      throw new BusinessRuleError(
+        `${payment.paymentNumber} has been refunded — the refund is the record`,
+      );
+    }
+
+    const outstanding = await prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          state: "CANCELLED",
+          notes: reason ?? "Voided at the counter",
+        },
+      });
+
+      if (!payment.orderId) return 0;
+      await recalcOrderPayments(tx, payment.orderId);
+      const order = await tx.order.findUnique({
+        where: { id: payment.orderId },
+        select: { outstandingAmount: true },
+      });
+      return num(order?.outstandingAmount);
+    });
+
+    await recordAudit({
+      userId: user.id,
+      branchId: payment.branchId,
+      action: "PAYMENT_VOIDED",
+      entity: "Payment",
+      entityId: payment.id,
+      summary: `${payment.paymentNumber} voided (${formatCurrency(payment.amount)})`,
+    });
+
+    revalidateMoney(payment.orderId ? [`/orders/${payment.orderId}`] : []);
+    revalidateOperational();
+    return { outstanding };
   });
 }

@@ -4,6 +4,8 @@ import { AlertTriangle, Boxes, PackageOpen } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
+import { toggleInventoryItemAction } from "@/app/(app)/inventory/actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -48,6 +50,8 @@ const CATEGORIES = [
 
 interface StockRow {
   id: string;
+  itemId: string;
+  isActive: boolean;
   sku: string;
   name: string;
   category: string;
@@ -142,6 +146,8 @@ export default async function InventoryPage({
 
   const rows: StockRow[] = stocks.map((stock) => ({
     id: stock.id,
+    itemId: stock.item.id,
+    isActive: stock.item.isActive,
     sku: stock.item.sku,
     name: stock.item.name,
     category: stock.item.category,
@@ -240,6 +246,43 @@ export default async function InventoryPage({
       key: "flag",
       header: "",
       cell: (row) => (row.isLow ? <StatusBadge status="LOW" tone="danger" label="Low" /> : null),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/inventory/${row.itemId}`}
+          extra={[
+            { label: "Record movement", icon: "arrowRight", href: `/inventory?move=${row.itemId}` },
+            { label: "Purchase orders", icon: "list", href: "/purchases" },
+          ]}
+          remove={
+            canManage
+              ? {
+                  subject: row.name,
+                  confirmLabel: row.isActive ? "Archive item" : "Restore item",
+                  successMessage: row.isActive
+                    ? `${row.name} archived`
+                    : `${row.name} restored`,
+                  impact: row.isActive ? (
+                    <>
+                      <p>
+                        {row.name} comes off the ordering and issuing lists. Its stock
+                        balances and its whole movement ledger are kept.
+                      </p>
+                      <p>Restore it here whenever you start carrying it again.</p>
+                    </>
+                  ) : (
+                    <p>{row.name} goes back on the ordering and issuing lists.</p>
+                  ),
+                  action: toggleInventoryItemAction.bind(null, row.itemId, !row.isActive),
+                }
+              : undefined
+          }
+        />
+      ),
     },
   ];
 

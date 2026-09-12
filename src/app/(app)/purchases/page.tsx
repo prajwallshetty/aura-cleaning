@@ -3,6 +3,8 @@ import { Building, FileText, ShoppingCart, Wallet } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
+import { archiveSupplierAction } from "@/app/(app)/purchases/actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -286,6 +288,46 @@ export default async function PurchasesPage({
       key: "status",
       header: "Status",
       cell: (row) => <StatusBadge status={row.isActive ? "ACTIVE" : "INACTIVE"} />,
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/purchases/suppliers/${row.id}`}
+          extra={[
+            { label: "Raise a purchase order", icon: "plus", href: "/purchases?tab=orders" },
+          ]}
+          remove={
+            canManage
+              ? {
+                  subject: row.name,
+                  confirmLabel: row.orderCount > 0 ? "Retire supplier" : "Delete supplier",
+                  successMessage:
+                    row.orderCount > 0 ? `${row.name} retired` : `${row.name} deleted`,
+                  impact:
+                    row.orderCount > 0 ? (
+                      <>
+                        <p>
+                          {row.name} has {row.orderCount} purchase order
+                          {row.orderCount === 1 ? "" : "s"}, so the record is kept and
+                          taken out of the pickers instead.
+                        </p>
+                        <p>Every order, invoice and payment stays readable.</p>
+                      </>
+                    ) : (
+                      <p>
+                        Nothing has ever been ordered from this supplier, so the record is
+                        removed outright.
+                      </p>
+                    ),
+                  action: archiveSupplierAction.bind(null, { id: row.id }),
+                }
+              : undefined
+          }
+        />
+      ),
     },
   ];
 

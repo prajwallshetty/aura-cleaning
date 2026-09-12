@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS, ROLE_LABELS, isGlobalRole } from "@/lib/rbac";
+import { cuidSchema } from "@/lib/validations/common";
 import {
   assertBranchAccess,
   authorize,
@@ -447,6 +449,57 @@ export async function decideLeaveAction(payload: unknown): Promise<ActionResult<
     });
 
     revalidatePath("/staff");
+    return null;
+  });
+}
+
+
+/**
+ * Deactivating a staff account.
+ *
+ * People are never deleted: their name is on garment histories, payments and
+ * audit entries, and removing the row would blank all of it. Deactivating locks
+ * them out and takes them off the assignment lists while the trail stays intact.
+ */
+export async function setStaffStatusAction(payload: unknown): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const actor = await authorize(PERMISSIONS.STAFF_MANAGE);
+    const { staffId, status } = z
+      .object({
+        staffId: cuidSchema,
+        status: z.enum(["ACTIVE", "SUSPENDED", "INACTIVE"]),
+      })
+      .parse(payload);
+
+    const staff = await prisma.user.findUnique({
+      where: { id: staffId },
+      select: { id: true, name: true, status: true, branchId: true, role: true },
+    });
+    if (!staff) throw new NotFoundError("Staff member not found");
+    if (staff.branchId) assertBranchAccess(actor, staff.branchId);
+
+    if (staff.id === actor.id) {
+      throw new BusinessRuleError("You cannot change your own account status");
+    }
+    if (staff.role === "SUPER_ADMIN" && actor.role !== "SUPER_ADMIN") {
+      throw new BusinessRuleError("Only a super admin can change a super admin");
+    }
+    if (staff.status === status) {
+      throw new BusinessRuleError(`${staff.name} is already ${status.toLowerCase()}`);
+    }
+
+    await prisma.user.update({ where: { id: staffId }, data: { status } });
+    await recordAudit({
+      userId: actor.id,
+      branchId: staff.branchId,
+      action: "STAFF_STATUS_CHANGED",
+      entity: "User",
+      entityId: staffId,
+      summary: `${staff.name}: ${staff.status} → ${status}`,
+    });
+
+    revalidatePath("/staff");
+    revalidatePath(`/staff/${staffId}`);
     return null;
   });
 }

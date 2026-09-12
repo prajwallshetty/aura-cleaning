@@ -13,6 +13,8 @@ import {
   ExpenseDecisionControls,
   ExpenseDialog,
 } from "@/app/(app)/settings/settings-dialogs";
+import { RowActions } from "@/components/shared/row-actions";
+import { deleteExpenseAction } from "@/app/(app)/settings/actions";
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
@@ -173,19 +175,39 @@ export default async function ExpensesPage({
         <span className="text-sm font-semibold numeric">{formatCurrency(row.amount)}</span>
       ),
     },
-    ...(canApprove
-      ? [
-          {
-            key: "actions",
-            header: "",
-            className: "text-right",
-            cell: (row: ExpenseRow) =>
-              row.status === "PENDING" ? (
-                <ExpenseDecisionControls expenseId={row.id} />
-              ) : null,
-          } satisfies Column<ExpenseRow>,
-        ]
-      : []),
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row: ExpenseRow) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {canApprove && row.status === "PENDING" ? (
+            <ExpenseDecisionControls expenseId={row.id} />
+          ) : null}
+          {canManage ? (
+            <RowActions
+              compact
+              remove={
+                row.status === "PENDING"
+                  ? {
+                      subject: row.expenseNumber,
+                      confirmLabel: "Withdraw expense",
+                      successMessage: `${row.expenseNumber} withdrawn`,
+                      impact: (
+                        <p>
+                          Nobody has approved this yet, so it is removed outright and never
+                          reaches the profit figure.
+                        </p>
+                      ),
+                      action: deleteExpenseAction.bind(null, { id: row.id }),
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
+        </div>
+      ),
+    } satisfies Column<ExpenseRow>,
   ];
 
   return (

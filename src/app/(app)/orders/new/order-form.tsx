@@ -21,6 +21,7 @@ import { FormError, FormField } from "@/components/shared/form-field";
 import { formatCurrency } from "@/lib/money";
 import { createOrderAction, quoteOrderAction } from "@/app/(app)/orders/actions";
 import type { FieldErrors } from "@/lib/action-result";
+import { signalDataChange } from "@/components/shared/live-refresh";
 import {
   CustomerPicker,
   type PickedCustomer,
@@ -237,6 +238,35 @@ export function OrderForm({
     );
   };
 
+  /**
+   * Where to go after a successful booking. A counter working through a queue
+   * wants the form back and empty; one booking a single order wants to see it
+   * and print the tag.
+   */
+  const [after, setAfter] = useState<"view" | "again">("view");
+
+  const resetForNext = () => {
+    setCustomer(null);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerEmail("");
+    setAddressLine("");
+    setCity("");
+    setPincode("");
+    setLandmark("");
+    setItems([newLine(services, garmentTypes)]);
+    setDiscountAmount(0);
+    setDiscountReason("");
+    setAdvanceAmount(0);
+    setSpecialInstructions("");
+    setStainNotes("");
+    setDamageNotes("");
+    setPickupScheduledAt("");
+    setFormError(null);
+    setFieldErrors({});
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const submit = () => {
     setFormError(null);
     setFieldErrors({});
@@ -278,7 +308,19 @@ export function OrderForm({
         toast.success(
           `${result.data.orderNumber} created with ${result.data.garmentCount} tagged garments`,
         );
-        router.push(`/orders/${result.data.id}`);
+        signalDataChange();
+        if (after === "again") {
+          resetForNext();
+          toast.message("Ready for the next one", {
+            description: `${result.data.orderNumber} is on the orders list.`,
+            action: {
+              label: "Open it",
+              onClick: () => router.push(`/orders/${result.data.id}`),
+            },
+          });
+        } else {
+          router.push(`/orders/${result.data.id}`);
+        }
       } else {
         setFormError(result.error);
         setFieldErrors(result.fieldErrors ?? {});
@@ -746,8 +788,23 @@ export function OrderForm({
               </span>
             </div>
 
-            <Button type="submit" className="w-full" size="lg" loading={isPending}>
-              Create order & print tags
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              loading={isPending}
+              onClick={() => setAfter("view")}
+            >
+              Save & view order
+            </Button>
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full"
+              disabled={isPending}
+              onClick={() => setAfter("again")}
+            >
+              <Plus /> Save & add another
             </Button>
             <p className="text-center text-xs text-muted-foreground">
               {totalPieces} garment {totalPieces === 1 ? "tag" : "tags"} will be generated

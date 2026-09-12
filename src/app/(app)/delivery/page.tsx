@@ -6,6 +6,8 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { LiveRefresh } from "@/components/shared/live-refresh";
+import { RowActions } from "@/components/shared/row-actions";
+import { CancelDeliveryButton } from "@/app/(app)/delivery/delivery-row-actions";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -281,8 +283,18 @@ export default async function DeliveryPage({
       key: "actions",
       header: "",
       className: "text-right",
-      cell: (row) =>
-        canManage ? <PickupStatusControl pickupId={row.id} status={row.status} /> : null,
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {canManage ? <PickupStatusControl pickupId={row.id} status={row.status} /> : null}
+          {canManage && !["RECEIVED_AT_LAUNDRY", "CANCELLED"].includes(row.status) ? (
+            <CancelDeliveryButton
+              compact
+              pickupId={row.id}
+              deliveryNumber={row.pickupNumber}
+            />
+          ) : null}
+        </div>
+      ),
     },
   ];
 
@@ -369,22 +381,31 @@ export default async function DeliveryPage({
       key: "actions",
       header: "",
       className: "text-right",
-      cell: (row) =>
-        !canManage || ["DELIVERED", "CANCELLED"].includes(row.status) ? null : (
-          <div className="flex justify-end gap-1.5">
-            {row.status === "DRIVER_ASSIGNED" ? (
-              <DispatchControl deliveryId={row.id} />
-            ) : null}
-            {row.status === "OUT_FOR_DELIVERY" ? (
-              <CompleteDeliveryDialog
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          <RowActions viewHref={`/delivery/${row.id}`} />
+          {!canManage || ["DELIVERED", "CANCELLED"].includes(row.status) ? null : (
+            <>
+              {row.status === "DRIVER_ASSIGNED" ? (
+                <DispatchControl deliveryId={row.id} />
+              ) : null}
+              {row.status === "OUT_FOR_DELIVERY" ? (
+                <CompleteDeliveryDialog
+                  deliveryId={row.id}
+                  deliveryNumber={row.deliveryNumber}
+                  amountToCollect={row.amountToCollect}
+                  canCollect={canCollect}
+                />
+              ) : null}
+              <CancelDeliveryButton
+                compact
                 deliveryId={row.id}
                 deliveryNumber={row.deliveryNumber}
-                amountToCollect={row.amountToCollect}
-                canCollect={canCollect}
               />
-            ) : null}
-          </div>
-        ),
+            </>
+          )}
+        </div>
+      ),
     },
   ];
 

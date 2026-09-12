@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -317,6 +318,28 @@ export default async function BillingPage({
         <span className="text-sm font-semibold numeric text-success">
           {formatCurrency(row.amount)}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/billing/payments/${row.id}`}
+          extra={
+            row.orderId
+              ? [
+                  { label: "View order", icon: "list" as const, href: `/orders/${row.orderId}` },
+                  {
+                    label: "Print receipt",
+                    icon: "printer" as const,
+                    href: `/orders/${row.orderId}/receipt`,
+                  },
+                ]
+              : []
+          }
+        />
       ),
     },
   ];

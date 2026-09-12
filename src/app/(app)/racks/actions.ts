@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { revalidateOperational } from "@/lib/revalidate";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS } from "@/lib/rbac";
+import { cuidSchema } from "@/lib/validations/common";
 import {
   assertBranchAccess,
   authorize,
@@ -243,5 +245,70 @@ export async function deleteRackAction(rackId: string): Promise<ActionResult<nul
 
     revalidateOperational();
     return null;
+  });
+}
+
+
+/**
+ * Taking a slot out of service. A slot holding garments cannot be removed —
+ * empty it first — and one that has ever held anything is deactivated rather
+ * than deleted so its location history still resolves.
+ */
+export async function deleteSlotAction(
+  payload: unknown,
+): Promise<ActionResult<{ deleted: boolean }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.RACK_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const slot = await prisma.rackSlot.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        code: true,
+        isActive: true,
+        rack: { select: { id: true, code: true, branchId: true } },
+        _count: { select: { garments: true, historyFrom: true, historyTo: true } },
+      },
+    });
+    if (!slot) throw new NotFoundError("Slot not found");
+    assertBranchAccess(user, slot.rack.branchId);
+
+    if (slot._count.garments > 0) {
+      throw new BusinessRuleError(
+        `${slot.rack.code}-${slot.code} still holds ${slot._count.garments} garment${slot._count.garments === 1 ? "" : "s"} — move them first`,
+      );
+    }
+
+    const hasHistory = slot._count.historyFrom + slot._count.historyTo > 0;
+
+    if (hasHistory) {
+      if (!slot.isActive) {
+        throw new BusinessRuleError(`${slot.rack.code}-${slot.code} is already out of service`);
+      }
+      await prisma.rackSlot.update({ where: { id }, data: { isActive: false } });
+      await recordAudit({
+        userId: user.id,
+        branchId: slot.rack.branchId,
+        action: "SLOT_DEACTIVATED",
+        entity: "RackSlot",
+        entityId: id,
+        summary: `${slot.rack.code}-${slot.code} taken out of service`,
+      });
+      revalidatePath(`/racks/${slot.rack.id}`);
+      return { deleted: false };
+    }
+
+    await prisma.rackSlot.delete({ where: { id } });
+    await recordAudit({
+      userId: user.id,
+      branchId: slot.rack.branchId,
+      action: "SLOT_DELETED",
+      entity: "RackSlot",
+      entityId: id,
+      summary: `${slot.rack.code}-${slot.code} removed`,
+    });
+    revalidatePath(`/racks/${slot.rack.id}`);
+    return { deleted: true };
   });
 }

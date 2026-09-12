@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, ScanLine, Shapes } from "lucide-react";
 
-import { DataTable, type Column } from "@/components/shared/data-table";
+import {
+  DataTable,
+  hiddenColumnsFrom,
+  toggleableColumns,
+  type Column,
+} from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
+import { ColumnToggle } from "@/components/shared/table-controls";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { LiveRefresh } from "@/components/shared/live-refresh";
@@ -103,6 +110,7 @@ export default async function CategoryTrackingPage({
     {
       key: "qty",
       header: "Qty",
+      toggleLabel: "Qty",
       className: "text-right",
       headerClassName: "text-right",
       hideOnMobile: true,
@@ -121,6 +129,7 @@ export default async function CategoryTrackingPage({
     {
       key: "expected",
       header: "Expected",
+      toggleLabel: "Expected",
       hideOnMobile: true,
       cell: (row) => (
         <span
@@ -133,6 +142,7 @@ export default async function CategoryTrackingPage({
     {
       key: "tag",
       header: "Tag",
+      toggleLabel: "Tag",
       hideOnMobile: true,
       cell: (row) =>
         row.tagPrinted ? (
@@ -166,11 +176,10 @@ export default async function CategoryTrackingPage({
     },
     {
       key: "issue",
-      header: "",
-      className: "text-right",
+      header: "Condition",
       cell: (row) =>
         row.issue ? (
-          <Link href={`/mismatch?garment=${row.garmentCode}`}>
+          <Link href={`/mismatch?q=${row.garmentCode}`}>
             <Badge tone="danger" className="gap-1">
               <AlertTriangle className="size-3" /> {MISMATCH_LABELS[row.issue]}
             </Badge>
@@ -178,6 +187,30 @@ export default async function CategoryTrackingPage({
         ) : (
           <Badge tone="success">OK</Badge>
         ),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/garments/${row.garmentCode}`}
+          extra={[
+            { label: "Print tag", icon: "printer", href: `/orders/${row.orderId}/tags` },
+            { label: "Scan station", icon: "scan", href: "/scan" },
+            { label: "View order", icon: "list", href: `/orders/${row.orderId}` },
+            ...(row.issue
+              ? [
+                  {
+                    label: "Resolve mismatch",
+                    icon: "rotate" as const,
+                    href: `/mismatch?q=${row.garmentCode}`,
+                  },
+                ]
+              : []),
+          ]}
+        />
+      ),
     },
   ];
 
@@ -251,8 +284,13 @@ export default async function CategoryTrackingPage({
         ]}
       />
 
+      <div className="flex justify-end">
+        <ColumnToggle columns={toggleableColumns(columns)} />
+      </div>
+
       <DataTable
         columns={columns}
+        hiddenColumns={hiddenColumnsFrom(param(query, "hide"))}
         rows={page.rows}
         getRowKey={(row) => row.id}
         empty={

@@ -1,11 +1,16 @@
 import Link from "next/link";
-import { ArrowLeft, Shirt } from "lucide-react";
+import { ArrowLeft, Eye, Shirt } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
+import { RowActions } from "@/components/shared/row-actions";
+import {
+  archiveGarmentTypeAction,
+  archiveServiceAction,
+} from "@/app/(app)/settings/actions";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import {
@@ -27,13 +32,27 @@ export default async function CataloguePage() {
   await requirePermission(PERMISSIONS.CATALOGUE_MANAGE);
 
   const [services, garmentTypes, rates] = await Promise.all([
-    prisma.service.findMany({ orderBy: { name: "asc" } }),
-    prisma.garmentType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
+    prisma.service.findMany({
+      orderBy: { name: "asc" },
+      include: { _count: { select: { orderItems: true, garments: true } } },
+    }),
+    prisma.garmentType.findMany({
+      orderBy: [{ category: "asc" }, { name: "asc" }],
+      include: { _count: { select: { orderItems: true, garments: true } } },
+    }),
     prisma.serviceRate.findMany(),
   ]);
 
+  /** How many places a catalogue entry is already referenced from. */
+  const serviceUsage = (entry: {
+    _count: { orderItems: number; garments: number };
+  }) => entry._count.orderItems + entry._count.garments;
+
   const rateMap = new Map(
-    rates.map((rate) => [`${rate.serviceId}:${rate.garmentTypeId}`, num(rate.price)]),
+    rates.map((rate) => [
+      `${rate.serviceId}:${rate.garmentTypeId}`,
+      num(rate.price),
+    ]),
   );
 
   const activeServices = services.filter((service) => service.isActive);
@@ -46,7 +65,12 @@ export default async function CataloguePage() {
         description="The catalogue the counter prices orders from."
         actions={
           <>
-            <Button asChild variant="outline" size="icon" aria-label="Back to settings">
+            <Button
+              asChild
+              variant="outline"
+              size="icon"
+              aria-label="Back to settings"
+            >
               <Link href="/settings">
                 <ArrowLeft />
               </Link>
@@ -59,8 +83,12 @@ export default async function CataloguePage() {
 
       <Tabs defaultValue="services">
         <TabsList>
-          <TabsTrigger value="services">Services ({services.length})</TabsTrigger>
-          <TabsTrigger value="garments">Garment types ({garmentTypes.length})</TabsTrigger>
+          <TabsTrigger value="services">
+            Services ({services.length})
+          </TabsTrigger>
+          <TabsTrigger value="garments">
+            Garment types ({garmentTypes.length})
+          </TabsTrigger>
           <TabsTrigger value="rates">Rate matrix</TabsTrigger>
         </TabsList>
 
@@ -74,15 +102,19 @@ export default async function CataloguePage() {
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {services.map((service) => (
-                <Card key={service.id}>
+                <Card key={service.id} className="lift">
                   <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
                     <div className="min-w-0">
-                      <CardTitle className="truncate text-base">{service.name}</CardTitle>
+                      <CardTitle className="truncate text-base">
+                        {service.name}
+                      </CardTitle>
                       <p className="font-mono text-xs text-muted-foreground">
                         {service.code}
                       </p>
                     </div>
-                    <StatusBadge status={service.isActive ? "ACTIVE" : "INACTIVE"} />
+                    <StatusBadge
+                      status={service.isActive ? "ACTIVE" : "INACTIVE"}
+                    />
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-baseline justify-between">
@@ -90,7 +122,8 @@ export default async function CataloguePage() {
                         {formatCurrency(service.basePrice)}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {humanize(service.pricingMode)} · {service.turnaroundHours}h
+                        {humanize(service.pricingMode)} ·{" "}
+                        {service.turnaroundHours}h
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -101,21 +134,69 @@ export default async function CataloguePage() {
                       ))}
                     </div>
                     {service.description ? (
-                      <p className="text-xs text-muted-foreground">{service.description}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {service.description}
+                      </p>
                     ) : null}
-                    <ServiceDialog
-                      service={{
-                        id: service.id,
-                        code: service.code,
-                        name: service.name,
-                        description: service.description,
-                        pricingMode: service.pricingMode,
-                        basePrice: num(service.basePrice),
-                        turnaroundHours: service.turnaroundHours,
-                        stages: service.stages as string[],
-                        isActive: service.isActive,
-                      }}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/settings/catalogue/${service.id}`}>
+                          <Eye /> View
+                        </Link>
+                      </Button>
+                      <ServiceDialog
+                        service={{
+                          id: service.id,
+                          code: service.code,
+                          name: service.name,
+                          description: service.description,
+                          pricingMode: service.pricingMode,
+                          basePrice: num(service.basePrice),
+                          turnaroundHours: service.turnaroundHours,
+                          stages: service.stages as string[],
+                          isActive: service.isActive,
+                        }}
+                      />
+                      <RowActions
+                        compact
+                        remove={{
+                          subject: service.name,
+                          confirmLabel:
+                            serviceUsage(service) > 0
+                              ? "Retire service"
+                              : "Delete service",
+                          successMessage:
+                            serviceUsage(service) > 0
+                              ? `${service.name} retired`
+                              : `${service.name} deleted`,
+                          impact:
+                            serviceUsage(service) > 0 ? (
+                              <>
+                                <p>
+                                  {service.name} is on {serviceUsage(service)}{" "}
+                                  order line
+                                  {serviceUsage(service) === 1 ? "" : "s"}, so
+                                  it is taken off the booking form and kept on
+                                  the record.
+                                </p>
+                                <p>
+                                  Those orders still read exactly as they were
+                                  sold.
+                                </p>
+                              </>
+                            ) : (
+                              <p>
+                                Nothing has ever been booked against this
+                                service, so it is removed along with its rate
+                                card.
+                              </p>
+                            ),
+                          action: archiveServiceAction.bind(null, {
+                            id: service.id,
+                          }),
+                        }}
+                      />
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -144,7 +225,10 @@ export default async function CataloguePage() {
                   </thead>
                   <tbody>
                     {garmentTypes.map((type) => (
-                      <tr key={type.id} className="border-b border-border last:border-0">
+                      <tr
+                        key={type.id}
+                        className="border-b border-border last:border-0"
+                      >
                         <td className="px-4 py-2.5">
                           <p className="font-medium">{type.name}</p>
                           <p className="font-mono text-xs text-muted-foreground">
@@ -155,18 +239,53 @@ export default async function CataloguePage() {
                           {humanize(type.category)}
                         </td>
                         <td className="px-4 py-2.5">
-                          <StatusBadge status={type.isActive ? "ACTIVE" : "INACTIVE"} />
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          <GarmentTypeDialog
-                            garmentType={{
-                              id: type.id,
-                              code: type.code,
-                              name: type.name,
-                              category: type.category,
-                              isActive: type.isActive,
-                            }}
+                          <StatusBadge
+                            status={type.isActive ? "ACTIVE" : "INACTIVE"}
                           />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <GarmentTypeDialog
+                              garmentType={{
+                                id: type.id,
+                                code: type.code,
+                                name: type.name,
+                                category: type.category,
+                                isActive: type.isActive,
+                              }}
+                            />
+                            <RowActions
+                              compact
+                              remove={{
+                                subject: type.name,
+                                confirmLabel:
+                                  serviceUsage(type) > 0
+                                    ? "Retire type"
+                                    : "Delete type",
+                                successMessage:
+                                  serviceUsage(type) > 0
+                                    ? `${type.name} retired`
+                                    : `${type.name} deleted`,
+                                impact:
+                                  serviceUsage(type) > 0 ? (
+                                    <p>
+                                      {serviceUsage(type)} order line
+                                      {serviceUsage(type) === 1 ? "" : "s"} name
+                                      this type, so it comes off the booking
+                                      form and stays on the record.
+                                    </p>
+                                  ) : (
+                                    <p>
+                                      Nothing has ever been booked as this type,
+                                      so it is removed along with its rates.
+                                    </p>
+                                  ),
+                                action: archiveGarmentTypeAction.bind(null, {
+                                  id: type.id,
+                                }),
+                              }}
+                            />
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -186,12 +305,10 @@ export default async function CataloguePage() {
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">
-                  Rate per garment type
-                </CardTitle>
+                <CardTitle className="text-sm">Rate per garment type</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  Leave a cell at zero to fall back to the service&apos;s base price.
-                  Corporate contracts override both.
+                  Leave a cell at zero to fall back to the service&apos;s base
+                  price. Corporate contracts override both.
                 </p>
               </CardHeader>
               <CardContent className="overflow-x-auto scrollbar-thin p-0">
@@ -210,16 +327,23 @@ export default async function CataloguePage() {
                   </thead>
                   <tbody>
                     {activeTypes.map((type) => (
-                      <tr key={type.id} className="border-b border-border last:border-0">
+                      <tr
+                        key={type.id}
+                        className="border-b border-border last:border-0"
+                      >
                         <td className="sticky left-0 bg-card px-4 py-2">
-                          <p className="whitespace-nowrap font-medium">{type.name}</p>
+                          <p className="whitespace-nowrap font-medium">
+                            {type.name}
+                          </p>
                         </td>
                         {activeServices.map((service) => (
                           <td key={service.id} className="px-3 py-2 text-right">
                             <RateInput
                               serviceId={service.id}
                               garmentTypeId={type.id}
-                              price={rateMap.get(`${service.id}:${type.id}`) ?? null}
+                              price={
+                                rateMap.get(`${service.id}:${type.id}`) ?? null
+                              }
                             />
                           </td>
                         ))}

@@ -133,7 +133,7 @@ export interface CustomerListRow {
   isRepeat: boolean;
 }
 
-export type CustomerSort = "recent" | "name" | "spend" | "outstanding";
+export type CustomerSort = "recent" | "name" | "spend" | "outstanding" | "orders";
 
 /**
  * Directory search. A query matches a name, a phone number in any punctuation,
@@ -144,6 +144,7 @@ export async function listCustomers(params: {
   branchIds: string[] | null;
   search?: string;
   sort?: CustomerSort;
+  direction?: "asc" | "desc";
   onlyOutstanding?: boolean;
   page?: number;
   pageSize?: number;
@@ -168,14 +169,28 @@ export async function listCustomers(params: {
     ];
   }
 
+  // A column header supplies its own direction; the sort dropdown keeps the
+  // sensible default for each field (biggest spend first, newest order first).
+  const fallback: Record<CustomerSort, "asc" | "desc"> = {
+    name: "asc",
+    spend: "desc",
+    outstanding: "desc",
+    recent: "desc",
+    orders: "desc",
+  };
+  const sort = params.sort ?? "recent";
+  const direction = params.direction ?? fallback[sort];
+
   const orderBy: Prisma.CustomerOrderByWithRelationInput =
-    params.sort === "name"
-      ? { name: "asc" }
-      : params.sort === "spend"
-        ? { totalSpent: "desc" }
-        : params.sort === "outstanding"
-          ? { outstandingAmount: "desc" }
-          : { lastOrderAt: "desc" };
+    sort === "name"
+      ? { name: direction }
+      : sort === "spend"
+        ? { totalSpent: direction }
+        : sort === "outstanding"
+          ? { outstandingAmount: direction }
+          : sort === "orders"
+            ? { orderCount: direction }
+            : { lastOrderAt: direction };
 
   const [rows, total] = await Promise.all([
     prisma.customer.findMany({

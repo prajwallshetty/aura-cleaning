@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -24,6 +25,7 @@ import {
   nextSupplierPaymentNumber,
 } from "@/lib/sequence";
 import { applyStockMovement } from "@/lib/services/inventory";
+import { cuidSchema } from "@/lib/validations/common";
 import {
   purchaseOrderSchema,
   purchaseReturnSchema,
@@ -463,5 +465,58 @@ export async function cancelPurchaseOrderAction(
 
     revalidatePath("/purchases");
     return null;
+  });
+}
+
+
+/**
+ * Retiring a supplier. One with purchase history is deactivated so it leaves
+ * the pickers while every order and invoice against it stays readable; one that
+ * has never been ordered from is deleted outright.
+ */
+export async function archiveSupplierAction(
+  payload: unknown,
+): Promise<ActionResult<{ deleted: boolean }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.PURCHASE_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const supplier = await prisma.supplier.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        _count: { select: { purchaseOrders: true, payments: true } },
+      },
+    });
+    if (!supplier) throw new NotFoundError("Supplier not found");
+
+    if (supplier._count.purchaseOrders + supplier._count.payments > 0) {
+      if (!supplier.isActive) {
+        throw new BusinessRuleError(`${supplier.name} is already retired`);
+      }
+      await prisma.supplier.update({ where: { id }, data: { isActive: false } });
+      await recordAudit({
+        userId: user.id,
+        action: "SUPPLIER_RETIRED",
+        entity: "Supplier",
+        entityId: id,
+        summary: `${supplier.name} retired — ${supplier._count.purchaseOrders} purchase orders kept`,
+      });
+      revalidatePath("/purchases");
+      return { deleted: false };
+    }
+
+    await prisma.supplier.delete({ where: { id } });
+    await recordAudit({
+      userId: user.id,
+      action: "SUPPLIER_DELETED",
+      entity: "Supplier",
+      entityId: id,
+      summary: `${supplier.name} removed`,
+    });
+    revalidatePath("/purchases");
+    return { deleted: true };
   });
 }

@@ -1,7 +1,14 @@
 import Link from "next/link";
 import { BadgeIndianRupee, Repeat, Users, Wallet } from "lucide-react";
 
-import { DataTable, type Column } from "@/components/shared/data-table";
+import {
+  DataTable,
+  hiddenColumnsFrom,
+  toggleableColumns,
+  type Column,
+} from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
+import { ColumnToggle } from "@/components/shared/table-controls";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -17,6 +24,7 @@ import { hasPermission, requirePermission } from "@/lib/session";
 import { branchOptions, pageParam, param, type SearchParams } from "@/lib/queries/filters";
 import { listCustomers, type CustomerSort } from "@/lib/services/customers";
 
+import { deleteCustomerAction } from "./actions";
 import { NewCustomerDialog } from "./customer-dialogs";
 
 export const metadata = { title: "Customers" };
@@ -37,7 +45,14 @@ export default async function CustomersPage({
   const user = await requirePermission(PERMISSIONS.CUSTOMER_VIEW);
 
   const search = param(params, "q");
-  const sort = (param(params, "sort") ?? "recent") as CustomerSort;
+  const dirParam = param(params, "dir");
+  const dir = dirParam === "asc" || dirParam === "desc" ? dirParam : undefined;
+  const requested = param(params, "sort") ?? "recent";
+  const sort = (
+    ["recent", "name", "spend", "outstanding", "orders"].includes(requested)
+      ? requested
+      : "recent"
+  ) as CustomerSort;
   const onlyOutstanding = param(params, "balance") === "owing";
   const page = pageParam(params);
 
@@ -48,7 +63,10 @@ export default async function CustomersPage({
     listCustomers({
       branchIds,
       search,
-      sort: SORTS.some((option) => option.value === sort) ? sort : "recent",
+      sort: sort as CustomerSort,
+      // Only a column header sets a direction; the dropdown leaves it to the
+      // sensible default for the field it picked.
+      direction: dir,
       onlyOutstanding,
       page,
       pageSize: 25,
@@ -68,10 +86,13 @@ export default async function CustomersPage({
     },
   });
 
+  const canManage = hasPermission(user, PERMISSIONS.CUSTOMER_MANAGE);
+
   const columns: Column<(typeof rows)[number]>[] = [
     {
       key: "customer",
       header: "Customer",
+      sortKey: "name",
       cell: (row) => (
         <div className="min-w-0 space-y-0.5">
           <Link
@@ -102,11 +123,13 @@ export default async function CustomersPage({
       key: "branch",
       header: "Branch",
       hideOnMobile: true,
+      toggleLabel: "Branch",
       cell: (row) => <span className="text-sm text-muted-foreground">{row.branchName}</span>,
     },
     {
       key: "orders",
       header: "Orders",
+      sortKey: "orders",
       className: "text-right",
       headerClassName: "text-right",
       cell: (row) => <span className="text-sm numeric">{row.orderCount}</span>,
@@ -114,6 +137,8 @@ export default async function CustomersPage({
     {
       key: "spend",
       header: "Lifetime spend",
+      sortKey: "spend",
+      toggleLabel: "Lifetime spend",
       className: "text-right",
       headerClassName: "text-right",
       cell: (row) => (
@@ -123,6 +148,7 @@ export default async function CustomersPage({
     {
       key: "balance",
       header: "Balance",
+      sortKey: "outstanding",
       className: "text-right",
       headerClassName: "text-right",
       cell: (row) => (
@@ -136,7 +162,9 @@ export default async function CustomersPage({
     {
       key: "last",
       header: "Last order",
+      sortKey: "recent",
       hideOnMobile: true,
+      toggleLabel: "Last order",
       cell: (row) => (
         <span className="text-sm text-muted-foreground">
           {row.lastOrderAt ? formatDate(row.lastOrderAt) : "—"}
@@ -148,9 +176,49 @@ export default async function CustomersPage({
       header: "",
       className: "text-right",
       cell: (row) => (
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/orders/new?customer=${row.id}`}>New order</Link>
-        </Button>
+        <RowActions
+          viewHref={`/customers/${row.id}`}
+          editHref={`/customers/${row.id}?edit=1`}
+          extra={[
+            {
+              label: "New order",
+              icon: "plus" as const,
+              href: `/orders/new?customer=${row.id}`,
+            },
+            {
+              label: "Their orders",
+              icon: "list" as const,
+              href: `/orders?q=${encodeURIComponent(row.phone)}`,
+            },
+          ]}
+          remove={
+            canManage
+              ? {
+                  subject: row.name,
+                  confirmLabel: row.orderCount > 0 ? "Retire customer" : "Delete customer",
+                  successMessage:
+                    row.orderCount > 0 ? `${row.name} retired` : `${row.name} deleted`,
+                  impact:
+                    row.orderCount > 0 ? (
+                      <>
+                        <p>
+                          {row.name} has {row.orderCount} order
+                          {row.orderCount === 1 ? "" : "s"}, so the record is kept and taken
+                          out of the pickers instead.
+                        </p>
+                        <p>Every order, payment and garment stays exactly as it is.</p>
+                      </>
+                    ) : (
+                      <p>
+                        This customer has never placed an order, so the record is removed
+                        outright.
+                      </p>
+                    ),
+                  action: deleteCustomerAction.bind(null, { customerId: row.id }),
+                }
+              : undefined
+          }
+        />
       ),
     },
   ];
@@ -195,10 +263,15 @@ export default async function CustomersPage({
         ]}
       />
 
+      <div className="flex justify-end">
+        <ColumnToggle columns={toggleableColumns(columns)} />
+      </div>
+
       <DataTable
         columns={columns}
         rows={rows}
         getRowKey={(row) => row.id}
+        hiddenColumns={hiddenColumnsFrom(param(params, "hide"))}
         empty={
           <EmptyState
             icon={Users}

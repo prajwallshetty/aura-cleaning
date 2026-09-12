@@ -3,6 +3,7 @@ import { CalendarCheck, UserCheck, Users } from "lucide-react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable, type Column } from "@/components/shared/data-table";
+import { RowActions } from "@/components/shared/row-actions";
 import { EmptyState } from "@/components/shared/empty-state";
 import { FilterBar } from "@/components/shared/filter-bar";
 import { PageHeader } from "@/components/shared/page-header";
@@ -13,6 +14,7 @@ import {
   LeaveDecisionControls,
   NewStaffDialog,
 } from "@/app/(app)/staff/staff-dialogs";
+import { setStaffStatusAction } from "@/app/(app)/staff/actions";
 import { prisma } from "@/lib/prisma";
 import { formatDate, toInputDate, todayRange } from "@/lib/dates";
 import { PERMISSIONS, ROLE_LABELS, isGlobalRole } from "@/lib/rbac";
@@ -226,6 +228,49 @@ export default async function StaffPage({
         ) : (
           <span className="text-xs text-muted-foreground">Not marked</span>
         ),
+    },
+    {
+      key: "actions",
+      header: "",
+      className: "text-right",
+      cell: (row) => (
+        <RowActions
+          viewHref={`/staff/${row.id}`}
+          extra={[
+            { label: "Their orders", icon: "list", href: `/staff/${row.id}` },
+          ]}
+          remove={
+            canManage && row.id !== user.id
+              ? {
+                  subject: row.name,
+                  confirmLabel:
+                    row.status === "ACTIVE" ? "Deactivate account" : "Reactivate account",
+                  successMessage:
+                    row.status === "ACTIVE"
+                      ? `${row.name} deactivated`
+                      : `${row.name} reactivated`,
+                  impact:
+                    row.status === "ACTIVE" ? (
+                      <>
+                        <p>
+                          {row.name} is locked out and comes off the assignment lists. They
+                          are never deleted — their name is on garment histories, payments
+                          and the audit trail.
+                        </p>
+                        <p>Reactivate them here whenever they come back.</p>
+                      </>
+                    ) : (
+                      <p>{row.name} can sign in again and be assigned work.</p>
+                    ),
+                  action: setStaffStatusAction.bind(null, {
+                    staffId: row.id,
+                    status: row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+                  }),
+                }
+              : undefined
+          }
+        />
+      ),
     },
   ];
 

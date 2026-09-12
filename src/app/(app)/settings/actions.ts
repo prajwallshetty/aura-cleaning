@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { cuidSchema } from "@/lib/validations/common";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
@@ -343,6 +346,183 @@ export async function decideExpenseAction(payload: unknown): Promise<ActionResul
     });
 
     revalidatePath("/settings/expenses");
+    return null;
+  });
+}
+
+
+/**
+ * Retiring a catalogue entry.
+ *
+ * A service or garment type that orders point at is never destroyed — doing so
+ * would rewrite what those orders say they were for — so it is deactivated and
+ * disappears from the pickers. Only an entry nothing has ever used is deleted.
+ */
+export async function archiveServiceAction(
+  payload: unknown,
+): Promise<ActionResult<{ deleted: boolean }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.CATALOGUE_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const service = await prisma.service.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        _count: { select: { orderItems: true, garments: true, rates: true } },
+      },
+    });
+    if (!service) throw new NotFoundError("Service not found");
+
+    const inUse = service._count.orderItems + service._count.garments > 0;
+
+    if (inUse) {
+      if (!service.isActive) throw new BusinessRuleError(`${service.name} is already retired`);
+      await prisma.service.update({ where: { id }, data: { isActive: false } });
+      await recordAudit({
+        userId: user.id,
+        action: "SERVICE_RETIRED",
+        entity: "Service",
+        entityId: id,
+        summary: `${service.name} retired — ${service._count.orderItems} order lines kept`,
+      });
+      revalidatePath("/settings/catalogue");
+      return { deleted: false };
+    }
+
+    await prisma.$transaction([
+      prisma.serviceRate.deleteMany({ where: { serviceId: id } }),
+      prisma.service.delete({ where: { id } }),
+    ]);
+    await recordAudit({
+      userId: user.id,
+      action: "SERVICE_DELETED",
+      entity: "Service",
+      entityId: id,
+      summary: `${service.name} removed from the catalogue`,
+    });
+    revalidatePath("/settings/catalogue");
+    return { deleted: true };
+  });
+}
+
+/** Same rule as services: retire what is in use, delete what never was. */
+export async function archiveGarmentTypeAction(
+  payload: unknown,
+): Promise<ActionResult<{ deleted: boolean }>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.CATALOGUE_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const type = await prisma.garmentType.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        isActive: true,
+        _count: { select: { orderItems: true, garments: true } },
+      },
+    });
+    if (!type) throw new NotFoundError("Garment type not found");
+
+    if (type._count.orderItems + type._count.garments > 0) {
+      if (!type.isActive) throw new BusinessRuleError(`${type.name} is already retired`);
+      await prisma.garmentType.update({ where: { id }, data: { isActive: false } });
+      await recordAudit({
+        userId: user.id,
+        action: "GARMENT_TYPE_RETIRED",
+        entity: "GarmentType",
+        entityId: id,
+        summary: `${type.name} retired`,
+      });
+      revalidatePath("/settings/catalogue");
+      return { deleted: false };
+    }
+
+    await prisma.$transaction([
+      prisma.serviceRate.deleteMany({ where: { garmentTypeId: id } }),
+      prisma.garmentType.delete({ where: { id } }),
+    ]);
+    await recordAudit({
+      userId: user.id,
+      action: "GARMENT_TYPE_DELETED",
+      entity: "GarmentType",
+      entityId: id,
+      summary: `${type.name} removed from the catalogue`,
+    });
+    revalidatePath("/settings/catalogue");
+    return { deleted: true };
+  });
+}
+
+/** Expenses can be withdrawn while nobody has acted on them. */
+export async function deleteExpenseAction(payload: unknown): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.EXPENSE_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const expense = await prisma.expense.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        expenseNumber: true,
+        branchId: true,
+        status: true,
+        amount: true,
+      },
+    });
+    if (!expense) throw new NotFoundError("Expense not found");
+    assertBranchAccess(user, expense.branchId);
+
+    if (expense.status !== "PENDING") {
+      throw new BusinessRuleError(
+        `${expense.expenseNumber} has already been ${expense.status.toLowerCase()} and stays on the books`,
+      );
+    }
+
+    await prisma.expense.delete({ where: { id } });
+    await recordAudit({
+      userId: user.id,
+      branchId: expense.branchId,
+      action: "EXPENSE_DELETED",
+      entity: "Expense",
+      entityId: id,
+      summary: `${expense.expenseNumber} withdrawn before approval`,
+    });
+
+    revalidatePath("/settings/expenses");
+    revalidatePath("/reports");
+    return null;
+  });
+}
+
+/** Retiring a template stops it being used without losing what it has sent. */
+export async function archiveTemplateAction(payload: unknown): Promise<ActionResult<null>> {
+  return runAction(async () => {
+    const user = await authorize(PERMISSIONS.NOTIFICATION_MANAGE);
+    const { id } = z.object({ id: cuidSchema }).parse(payload);
+
+    const template = await prisma.notificationTemplate.findUnique({
+      where: { id },
+      select: { id: true, name: true, isActive: true },
+    });
+    if (!template) throw new NotFoundError("Template not found");
+
+    await prisma.notificationTemplate.update({
+      where: { id },
+      data: { isActive: !template.isActive },
+    });
+    await recordAudit({
+      userId: user.id,
+      action: template.isActive ? "TEMPLATE_RETIRED" : "TEMPLATE_RESTORED",
+      entity: "NotificationTemplate",
+      entityId: id,
+      summary: `${template.name} ${template.isActive ? "retired" : "restored"}`,
+    });
+
+    revalidatePath("/settings/notifications");
     return null;
   });
 }
