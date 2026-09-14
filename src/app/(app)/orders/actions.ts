@@ -426,7 +426,6 @@ export async function rewashOrderAction(
             status: "REWASH",
             currentStage: washTask.stage,
             rewashCount: { increment: 1 },
-            rackSlotId: null,
           },
         });
 

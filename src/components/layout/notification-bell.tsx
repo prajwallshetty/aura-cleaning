@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   Clock3,
   Copy,
-  MapPin,
   ShieldAlert,
   Wallet,
 } from "lucide-react";
@@ -27,7 +26,6 @@ import type { Alert, AlertKind } from "@/lib/services/alerts";
 const ICONS: Record<AlertKind, typeof Bell> = {
   MISMATCH: ShieldAlert,
   MISSING: AlertTriangle,
-  WRONG_RACK: MapPin,
   DUPLICATE_SCAN: Copy,
   DELAYED: Clock3,
   PENDING_PAYMENT: Wallet,
@@ -36,7 +34,6 @@ const ICONS: Record<AlertKind, typeof Bell> = {
 const KIND_LABELS: Record<AlertKind, string> = {
   MISMATCH: "Mismatch",
   MISSING: "Missing",
-  WRONG_RACK: "Wrong rack",
   DUPLICATE_SCAN: "Duplicate scan",
   DELAYED: "Delayed",
   PENDING_PAYMENT: "Payment due",

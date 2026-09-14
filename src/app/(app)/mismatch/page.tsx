@@ -31,7 +31,6 @@ const KIND_TONE: Record<MismatchKind, "danger" | "warning"> = {
   WRONG_ORDER: "danger",
   WRONG_GARMENT: "danger",
   DUPLICATE_SCAN: "danger",
-  WRONG_LOCATION: "warning",
   NOT_SCANNED: "warning",
 };
 
@@ -77,7 +76,6 @@ export default async function MismatchPage({
   );
 
   const canResolve = hasPermission(user, PERMISSIONS.TRACKING_RESOLVE);
-  const canMove = hasPermission(user, PERMISSIONS.RACK_ASSIGN);
   const canReassign = hasPermission(user, PERMISSIONS.ORDER_UPDATE);
 
   return (
@@ -118,7 +116,6 @@ export default async function MismatchPage({
                 <Line tone="bad" count={row.summary.wrongOrder} label="Wrong order" />
                 <Line tone="bad" count={row.summary.wrongGarment} label="Wrong garment" />
                 <Line tone="bad" count={row.summary.duplicate} label="Duplicate scan" />
-                <Line tone="warn" count={row.summary.wrongLocation} label="Wrong rack" />
                 <Line tone="warn" count={row.summary.notScanned} label="Not scanned" />
               </ul>
               {problems === 0 ? (
@@ -170,7 +167,6 @@ export default async function MismatchPage({
               key={`${finding.garmentId}-${finding.kind}`}
               finding={finding}
               canResolve={canResolve}
-              canMove={canMove}
               canReassign={canReassign}
             />
           ))}
@@ -204,12 +200,10 @@ function Line({
 function FindingCard({
   finding,
   canResolve,
-  canMove,
   canReassign,
 }: {
   finding: MismatchFinding;
   canResolve: boolean;
-  canMove: boolean;
   canReassign: boolean;
 }) {
   return (
@@ -288,7 +282,6 @@ function FindingCard({
           orderId={finding.orderId}
           orderNumber={finding.orderNumber}
           canResolve={canResolve}
-          canMove={canMove && finding.kind === "WRONG_LOCATION"}
           canReassign={canReassign}
           isMissing={finding.kind === "MISSING"}
         />

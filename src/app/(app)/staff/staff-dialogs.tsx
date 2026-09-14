@@ -69,15 +69,12 @@ export function NewStaffDialog({
     email: "",
     phone: "",
     password: suggestPassword(),
-    role: "COUNTER_STAFF",
+    role: "SCANNER",
     branchId: defaultBranchId ?? branches[0]?.value ?? "",
     department: "",
     designation: "",
     monthlySalary: 0,
     shiftId: "none",
-    licenseNumber: "",
-    vehicleNumber: "",
-    vehicleType: "",
   });
 
   const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
@@ -203,29 +200,6 @@ export function NewStaffDialog({
             </FormField>
           ) : null}
 
-          {form.role === "DRIVER" ? (
-            <>
-              <FormField label="Licence number">
-                <Input
-                  value={form.licenseNumber}
-                  onChange={(e) => set({ licenseNumber: e.target.value })}
-                />
-              </FormField>
-              <FormField label="Vehicle number">
-                <Input
-                  value={form.vehicleNumber}
-                  onChange={(e) => set({ vehicleNumber: e.target.value })}
-                />
-              </FormField>
-              <FormField label="Vehicle type">
-                <Input
-                  value={form.vehicleType}
-                  onChange={(e) => set({ vehicleType: e.target.value })}
-                  placeholder="Two wheeler"
-                />
-              </FormField>
-            </>
-          ) : null}
         </div>
 
         <DialogFooter>

@@ -16,7 +16,6 @@ import {
   type ActionResult,
 } from "@/lib/action-result";
 import { cuidSchema } from "@/lib/validations/common";
-import { moveGarmentToSlot } from "@/lib/services/garments";
 import { recordGarmentScan } from "@/lib/services/garment-tracking";
 
 const garmentRef = z.object({ garmentId: cuidSchema });
@@ -32,8 +31,7 @@ async function loadGarment(garmentId: string) {
       currentStage: true,
       trackingCategory: true,
       orderId: true,
-      rackSlotId: true,
-      order: { select: { orderNumber: true, rackSlotId: true } },
+      order: { select: { orderNumber: true } },
       tasks: { select: { stage: true, status: true } },
       scans: { select: { stage: true, outcome: true } },
     },
@@ -188,66 +186,6 @@ export async function rescanGarmentAction(payload: unknown): Promise<ActionResul
       entity: "Garment",
       entityId: garment.id,
       summary: `${garment.garmentCode} re-scanned at ${garment.currentStage}`,
-    });
-
-    revalidateOperational();
-    return null;
-  });
-}
-
-/** "Move Garment" — put a stray piece back with the rest of its order. */
-export async function moveGarmentAction(payload: unknown): Promise<ActionResult<null>> {
-  return runAction(async () => {
-    const user = await authorize(PERMISSIONS.RACK_ASSIGN);
-    const { garmentId, rackSlotId } = garmentRef
-      .extend({ rackSlotId: z.union([cuidSchema, z.literal("order")]) })
-      .parse(payload);
-
-    const garment = await loadGarment(garmentId);
-    assertBranchAccess(user, garment.branchId);
-
-    const targetId = rackSlotId === "order" ? garment.order.rackSlotId : rackSlotId;
-    if (!targetId) {
-      throw new BusinessRuleError(
-        `${garment.order.orderNumber} has no rack slot to move this back to — file it from the packing station`,
-      );
-    }
-
-    const slot = await prisma.rackSlot.findUnique({
-      where: { id: targetId },
-      select: { id: true, code: true, rack: { select: { branchId: true, code: true } } },
-    });
-    if (!slot) throw new NotFoundError("Rack slot not found");
-    if (slot.rack.branchId !== garment.branchId) {
-      throw new BusinessRuleError("That rack slot belongs to another branch");
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await moveGarmentToSlot(tx, {
-        garmentId: garment.id,
-        fromSlotId: garment.rackSlotId,
-        toSlotId: slot.id,
-        actor: { userId: user.id, userName: user.name, branchId: garment.branchId },
-        note: "Moved from the mismatch centre",
-      });
-      await tx.garmentException.updateMany({
-        where: { garmentId: garment.id, status: "OPEN", type: "WRONG_LOCATION" },
-        data: {
-          status: "RESOLVED",
-          resolvedAt: new Date(),
-          resolvedById: user.id,
-          resolution: `Moved to ${slot.rack.code}-${slot.code}`,
-        },
-      });
-    });
-
-    await recordAudit({
-      userId: user.id,
-      branchId: garment.branchId,
-      action: "GARMENT_MOVED",
-      entity: "Garment",
-      entityId: garment.id,
-      summary: `${garment.garmentCode} moved to ${slot.rack.code}-${slot.code}`,
     });
 
     revalidateOperational();

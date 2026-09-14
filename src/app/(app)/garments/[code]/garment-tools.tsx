@@ -33,7 +33,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormField } from "@/components/shared/form-field";
-import { MoveGarmentDialog, type SlotOption } from "@/app/(app)/racks/move-garment";
 import { signalDataChange } from "@/components/shared/live-refresh";
 import { rescanGarmentAction } from "@/app/(app)/mismatch/actions";
 import {
@@ -50,12 +49,9 @@ interface GarmentToolsProps {
   /** The station this piece is queued at, and the one after it. */
   currentStage: string;
   nextStage: { stage: string; label: string } | null;
-  currentSlotLabel: string;
-  slots: SlotOption[];
   canEdit: boolean;
   canUpload: boolean;
   canAdvance: boolean;
-  canMove: boolean;
   canScan: boolean;
   details: {
     color: string | null;
@@ -73,12 +69,9 @@ export function GarmentTools({
   orderId,
   currentStage,
   nextStage,
-  currentSlotLabel,
-  slots,
   canEdit,
   canUpload,
   canAdvance,
-  canMove,
   canScan,
   details,
 }: GarmentToolsProps) {
@@ -155,15 +148,6 @@ export function GarmentTools({
         <Button variant="outline" loading={isPending} onClick={rescan}>
           <ScanLine /> Scan
         </Button>
-      ) : null}
-
-      {canMove ? (
-        <MoveGarmentDialog
-          garmentId={garmentId}
-          garmentCode={garmentCode}
-          currentSlotLabel={currentSlotLabel}
-          slots={slots}
-        />
       ) : null}
 
       <Button asChild variant="outline">

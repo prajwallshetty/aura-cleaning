@@ -46,7 +46,6 @@ export interface TagSheet {
   specialInstructions: string | null;
   tagPrintCount: number;
   tagLastPrintedAt: string | null;
-  rackLocation: string | null;
   garments: Array<{
     id: string;
     garmentCode: string;
@@ -55,7 +54,6 @@ export interface TagSheet {
     garmentTypeName: string;
     serviceName: string;
     statusLabel: string;
-    slot: string | null;
   }>;
   payments: Array<{
     id: string;
@@ -83,7 +81,6 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
             gstNumber: true,
           },
         },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
         items: {
           include: {
             service: { select: { name: true } },
@@ -95,7 +92,6 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
           include: {
             garmentType: { select: { name: true } },
             service: { select: { name: true } },
-            rackSlot: { select: { code: true, rack: { select: { code: true } } } },
           },
         },
         payments: {
@@ -161,9 +157,6 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
     specialInstructions: order.specialInstructions,
     tagPrintCount: order.tagPrintCount,
     tagLastPrintedAt: order.tagLastPrintedAt?.toISOString() ?? null,
-    rackLocation: order.rackSlot
-      ? `${order.rackSlot.rack.code}-${order.rackSlot.code}`
-      : null,
     garments: order.garments.map((garment) => ({
       id: garment.id,
       garmentCode: garment.garmentCode,
@@ -172,9 +165,6 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
       garmentTypeName: garment.garmentType.name,
       serviceName: garment.service.name,
       statusLabel: garment.status,
-      slot: garment.rackSlot
-        ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
-        : null,
     })),
     payments: order.payments.map((payment) => ({
       id: payment.id,

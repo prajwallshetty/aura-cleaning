@@ -9,13 +9,11 @@ import { revalidatePath } from "next/cache";
  * action trying to remember which screens it affects.
  */
 const OPERATIONAL_PATHS = [
-  "/overview",
   "/dashboard",
   "/orders",
   "/processing",
   "/tracking",
   "/mismatch",
-  "/racks",
   "/garments",
   "/scan",
 ] as const;
@@ -27,7 +25,7 @@ export function revalidateOperational(extra: string[] = []): void {
 }
 
 export function revalidateMoney(extra: string[] = []): void {
-  for (const path of [...MONEY_PATHS, "/overview", "/dashboard", ...extra]) {
+  for (const path of [...MONEY_PATHS, "/dashboard", ...extra]) {
     revalidatePath(path);
   }
 }

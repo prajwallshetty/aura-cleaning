@@ -8,7 +8,6 @@ import type { SessionUser } from "@/lib/session";
 export type AlertKind =
   | "MISMATCH"
   | "MISSING"
-  | "WRONG_RACK"
   | "DUPLICATE_SCAN"
   | "DELAYED"
   | "PENDING_PAYMENT";
@@ -32,7 +31,6 @@ export interface AlertFeed {
 const EMPTY_BY_KIND: Record<AlertKind, number> = {
   MISMATCH: 0,
   MISSING: 0,
-  WRONG_RACK: 0,
   DUPLICATE_SCAN: 0,
   DELAYED: 0,
   PENDING_PAYMENT: 0,
@@ -103,11 +101,9 @@ export async function getAlerts(user: SessionUser, limit = 30): Promise<AlertFee
     const kind: AlertKind =
       finding.kind === "MISSING"
         ? "MISSING"
-        : finding.kind === "WRONG_LOCATION"
-          ? "WRONG_RACK"
-          : finding.kind === "DUPLICATE_SCAN"
-            ? "DUPLICATE_SCAN"
-            : "MISMATCH";
+        : finding.kind === "DUPLICATE_SCAN"
+          ? "DUPLICATE_SCAN"
+          : "MISMATCH";
 
     // A garment merely waiting to be scanned is not worth interrupting anyone.
     if (finding.kind === "NOT_SCANNED") continue;
@@ -118,14 +114,12 @@ export async function getAlerts(user: SessionUser, limit = 30): Promise<AlertFee
       title:
         kind === "MISSING"
           ? `${finding.garmentCode} is missing`
-          : kind === "WRONG_RACK"
-            ? `${finding.garmentCode} is on the wrong rack`
-            : kind === "DUPLICATE_SCAN"
-              ? `${finding.garmentCode} was scanned twice`
-              : `${finding.garmentCode} does not match its order`,
+          : kind === "DUPLICATE_SCAN"
+            ? `${finding.garmentCode} was scanned twice`
+            : `${finding.garmentCode} does not match its order`,
       detail: `${finding.detail} · ${finding.customerName}`,
       href: `/mismatch?q=${finding.garmentCode}`,
-      tone: kind === "WRONG_RACK" ? "warning" : "danger",
+      tone: "danger",
       at: (finding.lastScanAt ?? finding.expectedDeliveryAt).toISOString(),
     });
   }

@@ -22,146 +22,17 @@ import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import { parseScan } from "@/lib/codes";
 import { categoryLabel } from "@/lib/garment-categories";
 import { advanceGarment, advanceMany } from "@/lib/services/processing";
-import { moveGarmentToSlot, recomputeOrderStatus } from "@/lib/services/garments";
+import { recomputeOrderStatus } from "@/lib/services/garments";
 import {
   assertUploadAllowed,
   getStorageProvider,
 } from "@/lib/providers/storage";
 import {
   advanceStageSchema,
-  assignSlotSchema,
   bulkAdvanceSchema,
   garmentUpdateSchema,
   markGarmentSchema,
-  scanSchema,
 } from "@/lib/validations/garment";
-import { formatDateTime } from "@/lib/dates";
-import { GARMENT_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
-
-export interface ScanResult {
-  kind: "garment" | "order";
-  garment?: {
-    id: string;
-    garmentCode: string;
-    orderId: string;
-    orderNumber: string;
-    customerName: string;
-    typeName: string;
-    serviceName: string;
-    status: string;
-    statusLabel: string;
-    stage: string;
-    stageLabel: string;
-    location: string | null;
-    lastScannedAt: string | null;
-    lastScannedBy: string | null;
-    stainNotes: string | null;
-    damageNotes: string | null;
-    history: {
-      id: string;
-      at: string;
-      status: string;
-      stage: string;
-      user: string | null;
-      note: string | null;
-    }[];
-    pendingStage: string | null;
-  };
-  order?: { id: string; orderNumber: string; status: string };
-}
-
-/**
- * Resolves a scanned or typed code. This is the "where is G1001 right now?"
- * endpoint — it answers with the garment's location, stage and full history.
- */
-export async function lookupCodeAction(
-  payload: unknown,
-): Promise<ActionResult<ScanResult>> {
-  return runAction(async () => {
-    const user = await authorize([PERMISSIONS.GARMENT_SCAN, PERMISSIONS.GARMENT_VIEW]);
-
-    const limit = rateLimit(
-      `scan:${user.id}`,
-      RATE_LIMITS.SCAN.limit,
-      RATE_LIMITS.SCAN.windowMs,
-    );
-    if (!limit.success) throw new BusinessRuleError("Scanning too fast — slow down a moment");
-
-    const { code } = scanSchema.parse(payload);
-    const parsed = parseScan(code);
-
-    if (parsed.kind === "order") {
-      const order = await prisma.order.findUnique({
-        where: { orderNumber: parsed.value },
-        select: { id: true, orderNumber: true, status: true, branchId: true },
-      });
-      if (!order) throw new NotFoundError(`No order matches ${parsed.value}`);
-      assertBranchAccess(user, order.branchId);
-      return {
-        kind: "order" as const,
-        order: { id: order.id, orderNumber: order.orderNumber, status: order.status },
-      };
-    }
-
-    const garment = await prisma.garment.findFirst({
-      where:
-        parsed.kind === "garment"
-          ? { garmentCode: parsed.value }
-          : { OR: [{ garmentCode: parsed.value }, { barcodeValue: parsed.value }, { qrPayload: code.trim() }] },
-      include: {
-        order: { select: { id: true, orderNumber: true, customerName: true } },
-        garmentType: { select: { name: true } },
-        service: { select: { name: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true, name: true } } } },
-        lastScannedBy: { select: { name: true } },
-        tasks: { orderBy: { sequence: "asc" } },
-        statusHistory: { orderBy: { createdAt: "desc" }, take: 40 },
-      },
-    });
-
-    if (!garment) throw new NotFoundError(`No garment matches "${code}"`);
-    assertBranchAccess(user, garment.branchId);
-
-    const pending = garment.tasks.find((task) =>
-      ["PENDING", "IN_PROGRESS"].includes(task.status),
-    );
-
-    return {
-      kind: "garment" as const,
-      garment: {
-        id: garment.id,
-        garmentCode: garment.garmentCode,
-        orderId: garment.order.id,
-        orderNumber: garment.order.orderNumber,
-        customerName: garment.order.customerName,
-        typeName: garment.garmentType.name,
-        serviceName: garment.service.name,
-        status: garment.status,
-        statusLabel: GARMENT_STATUS_LABELS[garment.status],
-        stage: garment.currentStage,
-        stageLabel: STAGE_LABELS[garment.currentStage],
-        location: garment.rackSlot
-          ? `Rack ${garment.rackSlot.rack.code} · Slot ${garment.rackSlot.code}`
-          : null,
-        lastScannedAt: garment.lastScannedAt
-          ? formatDateTime(garment.lastScannedAt)
-          : null,
-        lastScannedBy: garment.lastScannedBy?.name ?? null,
-        stainNotes: garment.stainNotes,
-        damageNotes: garment.damageNotes,
-        history: garment.statusHistory.map((entry) => ({
-          id: entry.id,
-          at: entry.createdAt.toISOString(),
-          status: entry.toStatus,
-          stage: entry.stage,
-          user: entry.userName,
-          note: entry.note,
-        })),
-        pendingStage: pending?.stage ?? null,
-      },
-    };
-  });
-}
 
 export async function advanceGarmentAction(
   payload: unknown,
@@ -188,7 +59,6 @@ export async function advanceGarmentAction(
       outcome: input.outcome,
       note: input.note ?? null,
       scannedVia: input.scannedVia ?? "manual",
-      rackSlotId: input.rackSlotId ?? null,
       contextOrderId: input.contextOrderId ?? null,
       actor: { userId: user.id, userName: user.name, branchId: user.branchId },
     });
@@ -234,7 +104,6 @@ export async function bulkAdvanceAction(
       outcome: input.outcome,
       note: input.note ?? null,
       scannedVia: "bulk",
-      rackSlotId: input.rackSlotId ?? null,
       actor: { userId: user.id, userName: user.name, branchId: user.branchId },
     });
 
@@ -343,120 +212,6 @@ export async function markGarmentAction(payload: unknown): Promise<ActionResult<
 
     revalidateOperational([`/garments/${garment.garmentCode}`]);
     return null;
-  });
-}
-
-/** Files garments (or a whole order) onto a rack slot. */
-export async function assignSlotAction(payload: unknown): Promise<ActionResult<{ moved: number }>> {
-  return runAction(async () => {
-    const user = await authorize(PERMISSIONS.RACK_ASSIGN);
-    const input = assignSlotSchema.parse(payload);
-
-    if (!user.branchId) throw new BusinessRuleError("Your account is not assigned to a branch");
-
-    const slot = await prisma.rackSlot.findUnique({
-      where: { id: input.rackSlotId },
-      include: { rack: { select: { branchId: true, code: true } }, _count: { select: { garments: true } } },
-    });
-    if (!slot) throw new NotFoundError("Rack slot not found");
-    assertBranchAccess(user, slot.rack.branchId);
-    if (!slot.isActive) throw new BusinessRuleError("That slot is out of service");
-
-    const garmentIds =
-      input.garmentIds && input.garmentIds.length > 0
-        ? input.garmentIds
-        : input.orderId
-          ? (
-              await prisma.garment.findMany({
-                where: {
-                  orderId: input.orderId,
-                  status: { notIn: ["DELIVERED", "LOST"] },
-                },
-                select: { id: true },
-              })
-            ).map((garment) => garment.id)
-          : [];
-
-    if (garmentIds.length === 0) {
-      throw new BusinessRuleError("Select at least one garment to file");
-    }
-
-    if (slot._count.garments + garmentIds.length > slot.capacity) {
-      throw new BusinessRuleError(
-        `Slot ${slot.code} holds ${slot.capacity} garments and already has ${slot._count.garments}`,
-      );
-    }
-
-    const moved = await prisma.$transaction(async (tx) => {
-      const garments = await tx.garment.findMany({
-        where: { id: { in: garmentIds } },
-        select: { id: true, rackSlotId: true, branchId: true, status: true, orderId: true },
-      });
-
-      let count = 0;
-      const orderIds = new Set<string>();
-
-      for (const garment of garments) {
-        if (garment.branchId !== slot.rack.branchId) continue;
-
-        await moveGarmentToSlot(tx, {
-          garmentId: garment.id,
-          fromSlotId: garment.rackSlotId,
-          toSlotId: slot.id,
-          actor: { userId: user.id, userName: user.name, branchId: user.branchId! },
-          note: input.note ?? "Filed to slot",
-        });
-
-        if (["PACKED", "QC_PASSED", "PACKING"].includes(garment.status)) {
-          await tx.garment.update({
-            where: { id: garment.id },
-            data: { status: "READY" },
-          });
-          await tx.garmentStatusHistory.create({
-            data: {
-              garmentId: garment.id,
-              fromStatus: garment.status,
-              toStatus: "READY",
-              stage: "PACKING",
-              branchId: user.branchId!,
-              userId: user.id,
-              userName: user.name,
-              note: `Filed to ${slot.rack.code} · ${slot.code}`,
-            },
-          });
-        }
-
-        orderIds.add(garment.orderId);
-        count += 1;
-      }
-
-      for (const orderId of orderIds) {
-        await recomputeOrderStatus(tx, orderId, {
-          userId: user.id,
-          userName: user.name,
-          branchId: user.branchId!,
-        });
-        // Keep the order header's own slot pointer in step with its garments.
-        await tx.order.update({
-          where: { id: orderId },
-          data: { rackSlotId: slot.id },
-        });
-      }
-
-      return count;
-    });
-
-    await recordAudit({
-      userId: user.id,
-      branchId: user.branchId,
-      action: "GARMENTS_FILED",
-      entity: "RackSlot",
-      entityId: slot.id,
-      summary: `${moved} garments filed to ${slot.rack.code} · ${slot.code}`,
-    });
-
-    revalidateOperational();
-    return { moved };
   });
 }
 

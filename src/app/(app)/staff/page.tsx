@@ -153,9 +153,7 @@ export default async function StaffPage({
   const canApproveLeave = hasPermission(user, PERMISSIONS.STAFF_APPROVE_LEAVE);
 
   const assignableRoles = ALL_ROLES.filter((candidate) =>
-    user.role === "SUPER_ADMIN"
-      ? true
-      : !["SUPER_ADMIN", "OWNER"].includes(candidate),
+    user.role === "SUPER_ADMIN" ? true : candidate !== "SUPER_ADMIN",
   );
 
   const columns: Column<StaffRow>[] = [

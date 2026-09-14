@@ -33,9 +33,9 @@ import {
 
 const BCRYPT_ROUNDS = 12;
 
-/** Only a super admin may mint another super admin or owner. */
+/** Only a super admin may mint another super admin. */
 function assertCanAssignRole(actorRole: string, targetRole: string) {
-  const privileged = ["SUPER_ADMIN", "OWNER"];
+  const privileged = ["SUPER_ADMIN"];
   if (privileged.includes(targetRole) && actorRole !== "SUPER_ADMIN") {
     throw new BusinessRuleError(
       `Only a super admin can assign the ${ROLE_LABELS[targetRole as keyof typeof ROLE_LABELS]} role`,
@@ -85,7 +85,7 @@ export async function createStaffAction(
               addressLine: input.addressLine ?? null,
             },
           },
-          ...(input.role === "DRIVER"
+          ...(input.licenseNumber || input.vehicleNumber || input.vehicleType
             ? {
                 driver: {
                   create: {
@@ -174,14 +174,6 @@ export async function updateStaffAction(payload: unknown): Promise<ActionResult<
         },
       });
 
-      // Keep the driver profile in step with the role.
-      if (input.role === "DRIVER") {
-        await tx.driver.upsert({
-          where: { userId: staff.id },
-          create: { userId: staff.id },
-          update: {},
-        });
-      }
     });
 
     await recordAudit({

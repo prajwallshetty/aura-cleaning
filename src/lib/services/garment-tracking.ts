@@ -219,7 +219,6 @@ export type MismatchKind =
   | "MISSING"
   | "WRONG_ORDER"
   | "WRONG_GARMENT"
-  | "WRONG_LOCATION"
   | "DUPLICATE_SCAN"
   | "NOT_SCANNED";
 
@@ -242,7 +241,6 @@ export interface MismatchSummary {
   missing: number;
   wrongOrder: number;
   wrongGarment: number;
-  wrongLocation: number;
   duplicate: number;
   notScanned: number;
 }
@@ -253,7 +251,6 @@ const EMPTY_SUMMARY: MismatchSummary = {
   missing: 0,
   wrongOrder: 0,
   wrongGarment: 0,
-  wrongLocation: 0,
   duplicate: 0,
   notScanned: 0,
 };
@@ -309,7 +306,6 @@ export async function getCategoryPage(params: {
         garmentType: { select: { name: true } },
         service: { select: { name: true } },
         orderItem: { select: { quantity: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
         order: {
           select: {
             id: true,
@@ -369,9 +365,7 @@ export async function getCategoryPage(params: {
         statusLabel: GARMENT_STATUS_LABELS[garment.status],
         stage: garment.currentStage,
         stageLabel: STAGE_LABELS[garment.currentStage],
-        location: garment.rackSlot
-          ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
-          : STAGE_LABELS[garment.currentStage],
+        location: STAGE_LABELS[garment.currentStage],
         expectedDeliveryAt: garment.order.expectedDeliveryAt,
         isOverdue:
           garment.order.expectedDeliveryAt.getTime() < now &&
@@ -435,7 +429,6 @@ export const MISMATCH_LABELS: Record<MismatchKind, string> = {
   MISSING: "Missing",
   WRONG_ORDER: "Wrong order",
   WRONG_GARMENT: "Wrong garment",
-  WRONG_LOCATION: "Wrong location",
   DUPLICATE_SCAN: "Duplicate scan",
   NOT_SCANNED: "Not scanned",
 };
@@ -446,7 +439,6 @@ const KIND_RANK: MismatchKind[] = [
   "WRONG_GARMENT",
   "WRONG_ORDER",
   "DUPLICATE_SCAN",
-  "WRONG_LOCATION",
   "NOT_SCANNED",
 ];
 
@@ -479,9 +471,7 @@ export async function detectMismatches(params: {
       trackingCategory: true,
       status: true,
       currentStage: true,
-      rackSlotId: true,
       orderId: true,
-      rackSlot: { select: { code: true, rack: { select: { code: true } } } },
       order: {
         select: {
           id: true,
@@ -490,8 +480,6 @@ export async function detectMismatches(params: {
           customerName: true,
           customerPhone: true,
           expectedDeliveryAt: true,
-          rackSlotId: true,
-          rackSlot: { select: { code: true, rack: { select: { code: true } } } },
         },
       },
       scans: {
@@ -520,9 +508,6 @@ export async function detectMismatches(params: {
 
   for (const garment of garments) {
     const latest = garment.scans[0] ?? null;
-    const slotOf = (
-      slot: { code: string; rack: { code: string } } | null | undefined,
-    ) => (slot ? `${slot.rack.code}-${slot.code}` : null);
 
     const base = {
       garmentId: garment.id,
@@ -535,7 +520,7 @@ export async function detectMismatches(params: {
       customerName: garment.order.customerName,
       customerPhone: garment.order.customerPhone,
       branchId: garment.branchId,
-      expectedLocation: slotOf(garment.order.rackSlot) ?? STAGE_LABELS[garment.currentStage],
+      expectedLocation: STAGE_LABELS[garment.currentStage],
       lastScanLocation: latest
         ? (latest.location ?? STAGE_LABELS[latest.stage])
         : null,
@@ -612,21 +597,7 @@ export async function detectMismatches(params: {
       continue;
     }
 
-    // 6. Filed on a rack its order is not on.
-    const orderSlot = slotOf(garment.order.rackSlot);
-    const garmentSlot = slotOf(garment.rackSlot);
-    if (orderSlot && garmentSlot && orderSlot !== garmentSlot) {
-      findings.push({
-        ...base,
-        kind: "WRONG_LOCATION",
-        reported: false,
-        exceptionId: null,
-        detail: `On ${garmentSlot}; the rest of ${garment.order.orderNumber} is on ${orderSlot}`,
-      });
-      continue;
-    }
-
-    // 7. Cleared a station without anyone scanning it there. A garment merely
+    // 6. Cleared a station without anyone scanning it there. A garment merely
     //    *queued* at a station has nothing to answer for — it is the stations
     //    it has already passed that must each have a scan behind them.
     const scannedStages = new Set(
@@ -669,9 +640,6 @@ export function summarise(findings: MismatchFinding[], total: number): MismatchS
         break;
       case "WRONG_GARMENT":
         summary.wrongGarment += 1;
-        break;
-      case "WRONG_LOCATION":
-        summary.wrongLocation += 1;
         break;
       case "DUPLICATE_SCAN":
         summary.duplicate += 1;

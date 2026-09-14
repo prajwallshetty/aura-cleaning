@@ -18,13 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Scanner } from "@/components/shared/scanner";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -50,11 +43,6 @@ export interface QueueItem {
   priority: string;
 }
 
-export interface SlotOption {
-  id: string;
-  label: string;
-}
-
 interface WorkstationProps {
   stage: string;
   stageLabel: string;
@@ -64,7 +52,6 @@ interface WorkstationProps {
     label: string;
     tone: "default" | "success" | "destructive" | "warning";
   }[];
-  slots: SlotOption[];
   canOperate: boolean;
   /** Garments queued for this stage that are still finishing an earlier one. */
   waitingUpstream?: number;
@@ -84,7 +71,6 @@ export function Workstation({
   stageLabel,
   items,
   outcomes,
-  slots,
   canOperate,
   waitingUpstream = 0,
 }: WorkstationProps) {
@@ -92,7 +78,6 @@ export function Workstation({
   const [isPending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
-  const [slotId, setSlotId] = useState("none");
   const [alert, setAlert] = useState<string | null>(null);
 
   const selectedItems = useMemo(
@@ -155,7 +140,6 @@ export function Workstation({
         stage,
         outcome,
         note: note || undefined,
-        rackSlotId: slotId === "none" ? null : slotId,
       });
 
       if (!result.ok) {
@@ -222,22 +206,6 @@ export function Workstation({
                 onChange={(event) => setNote(event.target.value)}
                 placeholder="Optional note for this action"
               />
-
-              {stage === "PACKING" && slots.length > 0 ? (
-                <Select value={slotId} onValueChange={setSlotId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="File to rack slot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Do not file yet</SelectItem>
-                    {slots.map((slot) => (
-                      <SelectItem key={slot.id} value={slot.id}>
-                        {slot.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null}
 
               <div className="rounded-lg border border-border bg-muted/40 p-3">
                 <p className="text-sm font-medium">

@@ -5,13 +5,12 @@ import { usePathname } from "next/navigation";
 import { Shirt, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { DRIVER_NAV, visibleSections, type NavItem } from "@/components/layout/nav-config";
+import { visibleSections, type NavItem } from "@/components/layout/nav-config";
 import type { PermissionCode } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 
 interface SidebarProps {
   permissions: PermissionCode[];
-  isDriver: boolean;
   open: boolean;
   onClose: () => void;
 }
@@ -20,10 +19,9 @@ function isActive(pathname: string, item: NavItem) {
   return item.exact ? pathname === item.href : pathname.startsWith(item.href);
 }
 
-export function Sidebar({ permissions, isDriver, open, onClose }: SidebarProps) {
+export function Sidebar({ permissions, open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const sections = visibleSections(permissions);
-  const showDriverLink = isDriver && permissions.includes(DRIVER_NAV.permissions[0]);
 
   return (
     <>
@@ -60,14 +58,6 @@ export function Sidebar({ permissions, isDriver, open, onClose }: SidebarProps) 
         </div>
 
         <nav className="flex-1 space-y-5 overflow-y-auto scrollbar-thin px-3 py-4">
-          {showDriverLink ? (
-            <NavGroup
-              items={[DRIVER_NAV]}
-              pathname={pathname}
-              onNavigate={onClose}
-            />
-          ) : null}
-
           {sections.map((section, index) => (
             <div key={section.label ?? `section-${index}`} className="space-y-1">
               {section.label ? (
@@ -82,7 +72,7 @@ export function Sidebar({ permissions, isDriver, open, onClose }: SidebarProps) 
 
         <div className="border-t border-sidebar-border px-4 py-3">
           <p className="text-[11px] text-sidebar-muted">
-            Order → Garment → Processing → Location → Delivery
+            Garment → Customer → Order → Category → Status
           </p>
         </div>
       </aside>

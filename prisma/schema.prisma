@@ -16,15 +16,8 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN
-  OWNER
-  BRANCH_MANAGER
-  COUNTER_STAFF
-  WASHING_STAFF
-  IRONING_STAFF
-  QC_STAFF
-  PACKING_STAFF
-  DRIVER
-  ACCOUNTANT
+  MANAGER
+  SCANNER
 }
 
 enum UserStatus {
@@ -407,7 +400,6 @@ model Branch {
   users                 User[]
   orders                Order[]
   garments              Garment[]
-  racks                 Rack[]
   processingTasks       ProcessingTask[]
   processingBatches     ProcessingBatch[]
   invoices              Invoice[]
@@ -427,7 +419,6 @@ model Branch {
   notifications         Notification[]
   auditLogs             AuditLog[]
   garmentHistory        GarmentStatusHistory[]
-  locationHistory       GarmentLocationHistory[]
   customers             Customer[]
   scanEvents            ScanEvent[]
   garmentScans          GarmentScan[]
@@ -445,7 +436,7 @@ model User {
   email        String     @unique
   phone        String?
   passwordHash String
-  role         UserRole   @default(COUNTER_STAFF)
+  role         UserRole   @default(SCANNER)
   status       UserStatus @default(ACTIVE)
   branchId     String?
   branch       Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
@@ -467,7 +458,6 @@ model User {
   createdOrders        Order[]                  @relation("OrderCreatedBy")
   garmentScans         Garment[]                @relation("GarmentLastScannedBy")
   garmentHistory       GarmentStatusHistory[]
-  locationHistory      GarmentLocationHistory[]
   assignedTasks        ProcessingTask[]         @relation("TaskAssignee")
   taskHistory          ProcessingHistory[]
   batches              ProcessingBatch[]        @relation("BatchOperator")
@@ -851,9 +841,6 @@ model Order {
   stainNotes          String?
   damageNotes         String?
 
-  rackSlotId String?
-  rackSlot   RackSlot? @relation(fields: [rackSlotId], references: [id], onDelete: SetNull)
-
   tagPrintCount    Int       @default(0)
   tagLastPrintedAt DateTime?
 
@@ -885,7 +872,6 @@ model Order {
   @@index([expectedDeliveryAt])
   @@index([paymentStatus])
   @@index([b2bAccountId])
-  @@index([rackSlotId])
   @@map("orders")
 }
 
@@ -967,9 +953,6 @@ model Garment {
   rewashCount Int     @default(0)
   reworkCount Int     @default(0)
 
-  rackSlotId String?
-  rackSlot   RackSlot? @relation(fields: [rackSlotId], references: [id], onDelete: SetNull)
-
   lastScannedAt   DateTime?
   lastScannedById String?
   lastScannedBy   User?     @relation("GarmentLastScannedBy", fields: [lastScannedById], references: [id], onDelete: SetNull)
@@ -980,7 +963,6 @@ model Garment {
   updatedAt DateTime @updatedAt
 
   statusHistory   GarmentStatusHistory[]
-  locationHistory GarmentLocationHistory[]
   tasks           ProcessingTask[]
   photos          GarmentPhoto[]
   complaints      Complaint[]
@@ -990,7 +972,6 @@ model Garment {
   @@index([orderId])
   @@index([branchId, status])
   @@index([currentStage])
-  @@index([rackSlotId])
   @@index([garmentTypeId])
   @@index([branchId, trackingCategory, status])
   @@map("garments")
@@ -1110,72 +1091,6 @@ model ProcessingHistory {
 
   @@index([taskId, createdAt])
   @@map("processing_history")
-}
-
-// ============================================================================
-// RACK & LOCATION
-// ============================================================================
-
-model Rack {
-  id          String  @id @default(cuid())
-  branchId    String
-  branch      Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  code        String
-  name        String
-  description String?
-  isActive    Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  slots RackSlot[]
-
-  @@unique([branchId, code])
-  @@index([branchId])
-  @@map("racks")
-}
-
-model RackSlot {
-  id       String  @id @default(cuid())
-  rackId   String
-  rack     Rack    @relation(fields: [rackId], references: [id], onDelete: Cascade)
-  code     String
-  label    String?
-  capacity Int     @default(20)
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  garments    Garment[]
-  orders      Order[]
-  historyFrom GarmentLocationHistory[] @relation("LocationFromSlot")
-  historyTo   GarmentLocationHistory[] @relation("LocationToSlot")
-
-  @@unique([rackId, code])
-  @@index([rackId])
-  @@map("rack_slots")
-}
-
-/// Immutable ledger of where a garment has physically been.
-model GarmentLocationHistory {
-  id         String    @id @default(cuid())
-  garmentId  String
-  garment    Garment   @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-  fromSlotId String?
-  fromSlot   RackSlot? @relation("LocationFromSlot", fields: [fromSlotId], references: [id], onDelete: SetNull)
-  toSlotId   String?
-  toSlot     RackSlot? @relation("LocationToSlot", fields: [toSlotId], references: [id], onDelete: SetNull)
-  branchId   String?
-  branch     Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  userId     String?
-  user       User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userName   String?
-  note       String?
-  createdAt  DateTime  @default(now())
-
-  @@index([garmentId, createdAt])
-  @@map("garment_location_history")
 }
 
 // ============================================================================
@@ -2151,7 +2066,6 @@ enum GarmentExceptionType {
   MISSING
   WRONG_ORDER
   WRONG_GARMENT
-  WRONG_LOCATION
   DUPLICATE_SCAN
   NOT_SCANNED
 }

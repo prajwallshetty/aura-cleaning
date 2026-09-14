@@ -2,419 +2,326 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { num } from "@/lib/money";
 import { parseScan } from "@/lib/codes";
-import {
-  GARMENT_STATUS_LABELS,
-  ORDER_STATUS_LABELS,
-  STAGE_LABELS,
-} from "@/lib/workflow";
+import { GARMENT_STATUS_LABELS, ORDER_STATUS_LABELS, STAGE_LABELS } from "@/lib/workflow";
 import { categoryMeta } from "@/lib/garment-categories";
-import {
-  MISMATCH_LABELS,
-  detectMismatches,
-  type MismatchKind,
-} from "@/lib/services/garment-tracking";
-import type { ScanSource, ScanTargetKind } from "@/generated/prisma/enums";
+import { recordGarmentScan } from "@/lib/services/garment-tracking";
+import type { Prisma } from "@/generated/prisma/client";
+import type { ScanSource } from "@/generated/prisma/enums";
 
-/** The order card the counter sees after a successful scan. */
-export interface ScannedOrder {
-  id: string;
-  orderNumber: string;
-  status: string;
-  statusLabel: string;
-  paymentStatus: string;
-  priority: string;
-  branchId: string;
-  branchName: string;
+/** A second read of the same tag inside this window is a duplicate, not a new scan. */
+const DUPLICATE_WINDOW_MS = 90 * 1000;
+
+/** Everything the fast result panel shows for a garment that scanned clean. */
+export interface ScannedGarmentCard {
+  garmentId: string;
+  garmentCode: string;
+  categoryLabel: string;
+  categoryEmoji: string;
+  garmentTypeName: string;
+  serviceName: string;
   customerId: string | null;
   customerName: string;
   customerPhone: string;
-  placedAt: string;
-  expectedDeliveryAt: string;
-  isOverdue: boolean;
-  totalPieces: number;
+  orderId: string;
+  orderNumber: string;
+  orderItemsSummary: string;
+  status: string;
+  statusLabel: string;
+  stage: string;
+  stageLabel: string;
+  paymentStatus: string;
   totalAmount: number;
   paidAmount: number;
   outstandingAmount: number;
-  rackLocation: string | null;
-  specialInstructions: string | null;
-  tagPrintCount: number;
-  items: Array<{ id: string; label: string; quantity: number; lineTotal: number }>;
-  stageSummary: Array<{ stage: string; label: string; done: number; total: number }>;
-  /** Pieces of each kind on this order, and how many have been scanned here. */
-  categories: Array<{
-    category: string;
-    label: string;
-    emoji: string;
-    expected: number;
-    scanned: number;
-  }>;
-  /** Anything the mismatch engine has to say about this order's pieces. */
-  issues: Array<{
-    garmentId: string;
-    garmentCode: string;
-    kind: MismatchKind;
-    label: string;
-    detail: string;
-  }>;
-  /** Set when the code was a garment tag rather than the order tag. */
-  scannedGarment: {
-    code: string;
-    typeName: string;
-    serviceName: string;
-    categoryLabel: string;
-    status: string;
-    slot: string | null;
-  } | null;
+  expectedDeliveryAt: string;
+  lastScannedAt: string | null;
 }
 
-export interface ScanOutcome {
+/** What the panel shows when the scanned garment does not belong where expected. */
+export interface MismatchCard {
+  garmentId: string;
+  garmentCode: string;
+  categoryLabel: string;
+  actualCustomerName: string;
+  actualOrderId: string;
+  actualOrderNumber: string;
+  expectedOrderId: string | null;
+  expectedOrderNumber: string | null;
+  expectedCustomerName: string | null;
+  expectedCategoryLabel: string | null;
+  detail: string;
+}
+
+export type ScanResultKind = "FOUND" | "MISMATCH" | "DUPLICATE" | "NOT_FOUND";
+
+export interface ScanResult {
   ok: boolean;
-  kind: ScanTargetKind;
+  kind: ScanResultKind;
   message: string;
-  order: ScannedOrder | null;
-  /**
-   * Set when a garment was read against an order it does not belong to. Both
-   * sides travel with it so the counter can see what it expected next to what
-   * it actually has, rather than being told only that something is wrong.
-   */
-  wrongOrder?: {
-    garmentId: string;
-    garmentCode: string;
-    categoryLabel: string;
-    expected: { orderNumber: string; customerName: string; location: string };
-    actual: {
-      orderId: string;
-      orderNumber: string;
-      customerName: string;
-      customerPhone: string;
-      location: string;
-      statusLabel: string;
-      lastScanAt: string | null;
-    };
-  };
+  garment: ScannedGarmentCard | null;
+  mismatch: MismatchCard | null;
+  /** Set for DUPLICATE — how long ago the previous scan of this tag was. */
+  secondsAgo: number | null;
 }
 
-const CLOSED = new Set(["DELIVERED", "CANCELLED", "REFUNDED"]);
-
-async function loadOrder(
-  orderId: string,
-  scannedGarmentCode: string | null,
-): Promise<ScannedOrder | null> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: {
-      branch: { select: { name: true } },
-      rackSlot: { select: { code: true, rack: { select: { code: true } } } },
+const GARMENT_CARD_INCLUDE = {
+  garmentType: { select: { name: true } },
+  service: { select: { name: true } },
+  order: {
+    select: {
+      id: true,
+      orderNumber: true,
+      status: true,
+      paymentStatus: true,
+      customerId: true,
+      customerName: true,
+      customerPhone: true,
+      expectedDeliveryAt: true,
+      totalAmount: true,
+      paidAmount: true,
+      outstandingAmount: true,
       items: {
         include: {
           service: { select: { name: true } },
           garmentType: { select: { name: true } },
         },
       },
-      garments: {
-        select: {
-          id: true,
-          garmentCode: true,
-          status: true,
-          currentStage: true,
-          trackingCategory: true,
-          garmentType: { select: { name: true } },
-          service: { select: { name: true } },
-          rackSlot: { select: { code: true, rack: { select: { code: true } } } },
-          tasks: { select: { stage: true, status: true } },
-          scans: {
-            select: { stage: true, outcome: true },
-          },
-        },
-      },
     },
-  });
+  },
+  lastScannedBy: { select: { name: true } },
+} as const;
 
-  if (!order) return null;
+type GarmentWithCard = Prisma.GarmentGetPayload<{ include: typeof GARMENT_CARD_INCLUDE }>;
 
-  // How far the order has actually got, station by station.
-  const done = new Map<string, { done: number; total: number }>();
-  for (const garment of order.garments) {
-    for (const task of garment.tasks) {
-      const entry = done.get(task.stage) ?? { done: 0, total: 0 };
-      entry.total += 1;
-      if (["COMPLETED", "PASSED", "SKIPPED"].includes(task.status)) entry.done += 1;
-      done.set(task.stage, entry);
-    }
-  }
+function itemsSummary(order: GarmentWithCard["order"]): string {
+  return order.items
+    .map((item) => `${item.quantity}× ${item.garmentType.name}`)
+    .join(", ");
+}
 
-  const scanned = scannedGarmentCode
-    ? order.garments.find((garment) => garment.garmentCode === scannedGarmentCode)
-    : undefined;
-
-  // Expected vs actually-scanned, per category — the count an operator does by
-  // hand when they open a bundle.
-  const byCategory = new Map<string, { expected: number; scanned: number }>();
-  for (const garment of order.garments) {
-    const entry = byCategory.get(garment.trackingCategory) ?? { expected: 0, scanned: 0 };
-    entry.expected += 1;
-    if (
-      garment.scans.some(
-        (scan) => scan.stage === garment.currentStage && scan.outcome === "MATCH",
-      )
-    ) {
-      entry.scanned += 1;
-    }
-    byCategory.set(garment.trackingCategory, entry);
-  }
-
-  const findings = await detectMismatches({ branchIds: [order.branchId] });
-  const orderGarmentIds = new Set(order.garments.map((garment) => garment.id));
-
+function toCard(garment: GarmentWithCard): ScannedGarmentCard {
+  const meta = categoryMeta(garment.trackingCategory);
   return {
-    id: order.id,
-    orderNumber: order.orderNumber,
-    status: order.status,
-    statusLabel: ORDER_STATUS_LABELS[order.status],
-    paymentStatus: order.paymentStatus,
-    priority: order.priority,
-    branchId: order.branchId,
-    branchName: order.branch.name,
-    customerId: order.customerId,
-    customerName: order.customerName,
-    customerPhone: order.customerPhone,
-    placedAt: order.placedAt.toISOString(),
-    expectedDeliveryAt: order.expectedDeliveryAt.toISOString(),
-    isOverdue: !CLOSED.has(order.status) && order.expectedDeliveryAt.getTime() < Date.now(),
-    totalPieces: order.totalPieces,
-    totalAmount: num(order.totalAmount),
-    paidAmount: num(order.paidAmount),
-    outstandingAmount: num(order.outstandingAmount),
-    rackLocation: order.rackSlot
-      ? `${order.rackSlot.rack.code}-${order.rackSlot.code}`
-      : null,
-    specialInstructions: order.specialInstructions,
-    tagPrintCount: order.tagPrintCount,
-    items: order.items.map((item) => ({
-      id: item.id,
-      label: `${item.garmentType.name} · ${item.service.name}`,
-      quantity: item.quantity,
-      lineTotal: num(item.lineTotal),
-    })),
-    stageSummary: [...done.entries()]
-      .map(([stage, counts]) => ({
-        stage,
-        label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? stage,
-        ...counts,
-      }))
-      .sort((a, b) => a.stage.localeCompare(b.stage)),
-    categories: [...byCategory.entries()].map(([category, counts]) => {
-      const meta = categoryMeta(category as never);
-      return {
-        category,
-        label: meta.label,
-        emoji: meta.emoji,
-        expected: counts.expected,
-        scanned: counts.scanned,
-      };
-    }),
-    issues: findings
-      .filter((finding) => orderGarmentIds.has(finding.garmentId))
-      .map((finding) => ({
-        garmentId: finding.garmentId,
-        garmentCode: finding.garmentCode,
-        kind: finding.kind,
-        label: MISMATCH_LABELS[finding.kind],
-        detail: finding.detail,
-      })),
-    scannedGarment: scanned
-      ? {
-          code: scanned.garmentCode,
-          typeName: scanned.garmentType.name,
-          serviceName: scanned.service.name,
-          categoryLabel: categoryMeta(scanned.trackingCategory).label,
-          status: scanned.status,
-          slot: scanned.rackSlot
-            ? `${scanned.rackSlot.rack.code}-${scanned.rackSlot.code}`
-            : null,
-        }
-      : null,
+    garmentId: garment.id,
+    garmentCode: garment.garmentCode,
+    categoryLabel: meta.label,
+    categoryEmoji: meta.emoji,
+    garmentTypeName: garment.garmentType.name,
+    serviceName: garment.service.name,
+    customerId: garment.order.customerId,
+    customerName: garment.order.customerName,
+    customerPhone: garment.order.customerPhone,
+    orderId: garment.order.id,
+    orderNumber: garment.order.orderNumber,
+    orderItemsSummary: itemsSummary(garment.order),
+    status: garment.status,
+    statusLabel: GARMENT_STATUS_LABELS[garment.status],
+    stage: garment.currentStage,
+    stageLabel: STAGE_LABELS[garment.currentStage],
+    paymentStatus: garment.order.paymentStatus,
+    totalAmount: num(garment.order.totalAmount),
+    paidAmount: num(garment.order.paidAmount),
+    outstandingAmount: num(garment.order.outstandingAmount),
+    expectedDeliveryAt: garment.order.expectedDeliveryAt.toISOString(),
+    lastScannedAt: garment.lastScannedAt?.toISOString() ?? null,
   };
 }
 
 /**
- * Resolves whatever came off the scanner to the order behind it.
+ * Resolves one read off the scanner — camera, USB/Bluetooth keyboard-emulation
+ * scanner, or a manually typed code — to a garment, and works out which of the
+ * four states the fast result panel shows.
  *
- * Order tags, garment tags, plain order numbers and plain garment codes all
- * land on the same order card — scanning the same tag twice reopens the order
- * that is already there rather than starting anything new, which is what keeps
- * a jumpy scanner from creating duplicates.
+ * Garment is the unit here, not the order: a plain garment tag or code is the
+ * common case, an order tag or number resolves to the next garment on that
+ * order still worth looking at, and everything else is "tag not found".
  */
-export async function resolveScan(
-  rawCode: string,
-  contextOrderId?: string | null,
-): Promise<ScanOutcome> {
-  const code = rawCode.trim();
+export async function resolveGarmentScan(params: {
+  rawCode: string;
+  /** The order the operator is working through, if they set one — the piece
+   *  that turns up on a *different* order is the mismatch case. */
+  contextOrderId?: string | null;
+  branchIds: string[] | null;
+  branchId: string;
+  userId: string;
+}): Promise<ScanResult> {
+  const code = params.rawCode.trim();
   if (!code) {
-    return { ok: false, kind: "UNKNOWN", message: "Nothing was scanned", order: null };
-  }
-
-  const parsed = parseScan(code);
-
-  if (parsed.kind === "order") {
-    const order = await prisma.order.findUnique({
-      where: { orderNumber: parsed.value },
-      select: { id: true },
-    });
-    if (!order) {
-      return {
-        ok: false,
-        kind: "ORDER",
-        message: `No order matches ${parsed.value}. Check the tag and scan again.`,
-        order: null,
-      };
-    }
     return {
-      ok: true,
-      kind: "ORDER",
-      message: `Order ${parsed.value}`,
-      order: await loadOrder(order.id, null),
+      ok: false,
+      kind: "NOT_FOUND",
+      message: "Nothing was scanned",
+      garment: null,
+      mismatch: null,
+      secondsAgo: null,
     };
   }
 
+  const parsed = parseScan(code);
+  const branchWhere = params.branchIds ? { branchId: { in: params.branchIds } } : {};
+
+  let garment: GarmentWithCard | null = null;
+
   if (parsed.kind === "garment" || parsed.kind === "unknown") {
-    const garment = await prisma.garment.findFirst({
+    garment = await prisma.garment.findFirst({
       where: {
+        ...branchWhere,
         OR: [
           { garmentCode: parsed.value },
           { barcodeValue: parsed.value },
           { qrPayload: code },
         ],
       },
-      select: {
-        id: true,
-        garmentCode: true,
-        orderId: true,
-        trackingCategory: true,
-        currentStage: true,
-        branchId: true,
-        status: true,
-        lastScannedAt: true,
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
-        order: { select: { orderNumber: true } },
-      },
+      include: GARMENT_CARD_INCLUDE,
     });
+  }
 
-    if (garment) {
-      // The counter had an order open and this piece is not on it — the exact
-      // case the mismatch engine exists to catch, so say so rather than
-      // quietly swapping the card for a different order.
-      if (contextOrderId && contextOrderId !== garment.orderId) {
-        const [context, actual] = await Promise.all([
-          prisma.order.findUnique({
-            where: { id: contextOrderId },
-            select: {
-              orderNumber: true,
-              customerName: true,
-              rackSlot: { select: { code: true, rack: { select: { code: true } } } },
-            },
-          }),
-          prisma.order.findUnique({
-            where: { id: garment.orderId },
-            select: {
-              id: true,
-              orderNumber: true,
-              customerName: true,
-              customerPhone: true,
-            },
-          }),
-        ]);
-
-        const slotLabel = garment.rackSlot
-          ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
-          : STAGE_LABELS[garment.currentStage];
-
-        return {
-          ok: false,
-          kind: "GARMENT",
-          message: `${garment.garmentCode} belongs to ${garment.order.orderNumber}, not ${context?.orderNumber ?? "the order on screen"}.`,
-          order: null,
-          wrongOrder: {
-            garmentId: garment.id,
-            garmentCode: garment.garmentCode,
-            categoryLabel: categoryMeta(garment.trackingCategory).label,
-            expected: {
-              orderNumber: context?.orderNumber ?? "—",
-              customerName: context?.customerName ?? "—",
-              location: context?.rackSlot
-                ? `${context.rackSlot.rack.code}-${context.rackSlot.code}`
-                : "On the floor",
-            },
-            actual: {
-              orderId: actual?.id ?? garment.orderId,
-              orderNumber: actual?.orderNumber ?? garment.order.orderNumber,
-              customerName: actual?.customerName ?? "—",
-              customerPhone: actual?.customerPhone ?? "—",
-              location: slotLabel,
-              statusLabel: GARMENT_STATUS_LABELS[garment.status],
-              lastScanAt: garment.lastScannedAt?.toISOString() ?? null,
-            },
-          },
-        };
-      }
-
-      return {
-        ok: true,
-        kind: "GARMENT",
-        message: `Garment ${garment.garmentCode}`,
-        order: await loadOrder(garment.orderId, garment.garmentCode),
-      };
-    }
-
-    // Someone may have typed an order number without its prefix.
-    const fallback = await prisma.order.findFirst({
-      where: { orderNumber: { equals: parsed.value, mode: "insensitive" } },
-      select: { id: true, orderNumber: true },
+  if (!garment && (parsed.kind === "order" || parsed.kind === "unknown")) {
+    const order = await prisma.order.findFirst({
+      where: { ...branchWhere, orderNumber: { equals: parsed.value, mode: "insensitive" } },
+      select: { id: true },
     });
-    if (fallback) {
-      return {
-        ok: true,
-        kind: "ORDER",
-        message: `Order ${fallback.orderNumber}`,
-        order: await loadOrder(fallback.id, null),
-      };
+    if (order) {
+      garment = await prisma.garment.findFirst({
+        where: { orderId: order.id, status: { notIn: ["DELIVERED", "LOST"] } },
+        orderBy: { garmentCode: "asc" },
+        include: GARMENT_CARD_INCLUDE,
+      });
     }
   }
 
-  if (parsed.kind === "slot") {
+  if (!garment) {
     return {
       ok: false,
-      kind: "SLOT",
-      message: `${parsed.value} is a rack slot, not an order tag. Scan the tag on the bundle.`,
-      order: null,
+      kind: "NOT_FOUND",
+      message: `"${code}" is not a tag this system issued.`,
+      garment: null,
+      mismatch: null,
+      secondsAgo: null,
     };
   }
 
+  // Same tag, read again inside the window — do not create a second record,
+  // just say so.
+  const recentScan = await prisma.garmentScan.findFirst({
+    where: { garmentId: garment.id, scannedAt: { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) } },
+    orderBy: { scannedAt: "desc" },
+    select: { scannedAt: true },
+  });
+  if (recentScan) {
+    const secondsAgo = Math.max(1, Math.round((Date.now() - recentScan.scannedAt.getTime()) / 1000));
+    return {
+      ok: true,
+      kind: "DUPLICATE",
+      message: `${garment.garmentCode} already scanned ${secondsAgo} second${secondsAgo === 1 ? "" : "s"} ago`,
+      garment: toCard(garment),
+      mismatch: null,
+      secondsAgo,
+    };
+  }
+
+  // Scanning against an order context that is not this garment's own order.
+  if (params.contextOrderId && params.contextOrderId !== garment.orderId) {
+    const context = await prisma.order.findUnique({
+      where: { id: params.contextOrderId },
+      select: { id: true, orderNumber: true, customerName: true },
+    });
+    return {
+      ok: false,
+      kind: "MISMATCH",
+      message: `${garment.garmentCode} belongs to ${garment.order.orderNumber}, not ${context?.orderNumber ?? "the order on screen"}.`,
+      garment: null,
+      mismatch: {
+        garmentId: garment.id,
+        garmentCode: garment.garmentCode,
+        categoryLabel: categoryMeta(garment.trackingCategory).label,
+        actualCustomerName: garment.order.customerName,
+        actualOrderId: garment.order.id,
+        actualOrderNumber: garment.order.orderNumber,
+        expectedOrderId: context?.id ?? params.contextOrderId,
+        expectedOrderNumber: context?.orderNumber ?? null,
+        expectedCustomerName: context?.customerName ?? null,
+        expectedCategoryLabel: categoryMeta(garment.trackingCategory).label,
+        detail: `Scanned under ${context?.orderNumber ?? "another order"}; it belongs to ${garment.order.orderNumber}.`,
+      },
+      secondsAgo: null,
+    };
+  }
+
+  // A garment already reported missing is still found — but that is news, not
+  // a routine match.
+  const openMissing = await prisma.garmentException.findFirst({
+    where: { garmentId: garment.id, status: "OPEN", type: "MISSING" },
+    select: { detail: true },
+  });
+  if (openMissing) {
+    return {
+      ok: false,
+      kind: "MISMATCH",
+      message: `${garment.garmentCode} was reported missing.`,
+      garment: null,
+      mismatch: {
+        garmentId: garment.id,
+        garmentCode: garment.garmentCode,
+        categoryLabel: categoryMeta(garment.trackingCategory).label,
+        actualCustomerName: garment.order.customerName,
+        actualOrderId: garment.order.id,
+        actualOrderNumber: garment.order.orderNumber,
+        expectedOrderId: null,
+        expectedOrderNumber: null,
+        expectedCustomerName: null,
+        expectedCategoryLabel: null,
+        detail: openMissing.detail ?? "Reported missing — recover it before scanning it back in.",
+      },
+      secondsAgo: null,
+    };
+  }
+
+  // A clean match — write it to the ledger and stamp the garment right away,
+  // so the next scan of the same tag falls into the duplicate window above.
+  await recordGarmentScan(prisma, {
+    garmentId: garment.id,
+    stage: garment.currentStage,
+    branchId: params.branchId,
+    userId: params.userId,
+    contextOrderId: garment.orderId,
+    note: "Scanned at the scan workspace",
+  });
+  await prisma.garment.update({
+    where: { id: garment.id },
+    data: { lastScannedAt: new Date(), lastScannedById: params.userId },
+  });
+
   return {
-    ok: false,
-    kind: "UNKNOWN",
-    message: `"${code}" is not a tag this system issued. Try again, or search for the order.`,
-    order: null,
+    ok: true,
+    kind: "FOUND",
+    message: `${garment.garmentCode} — ${garment.order.customerName} (${garment.order.orderNumber})`,
+    garment: toCard(garment),
+    mismatch: null,
+    secondsAgo: null,
   };
 }
 
 export async function logScan(params: {
   branchId: string;
   rawCode: string;
-  outcome: ScanOutcome;
+  result: ScanResult;
   source: ScanSource;
   userId: string;
   action?: string | null;
 }): Promise<void> {
+  const orderId = params.result.garment?.orderId ?? params.result.mismatch?.actualOrderId ?? null;
+  const garmentCode = params.result.garment?.garmentCode ?? params.result.mismatch?.garmentCode ?? null;
+
   await prisma.scanEvent.create({
     data: {
-      branchId: params.outcome.order?.branchId ?? params.branchId,
+      branchId: params.branchId,
       rawCode: params.rawCode.slice(0, 200),
-      resolvedAs: params.outcome.kind,
-      orderId: params.outcome.order?.id ?? null,
-      garmentCode: params.outcome.order?.scannedGarment?.code ?? null,
-      succeeded: params.outcome.ok,
-      message: params.outcome.message,
+      resolvedAs: garmentCode ? "GARMENT" : "UNKNOWN",
+      orderId,
+      garmentCode,
+      succeeded: params.result.kind === "FOUND",
+      message: params.result.message,
       source: params.source,
       action: params.action ?? null,
       scannedById: params.userId,

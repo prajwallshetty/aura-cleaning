@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin } from "lucide-react";
+import { ArrowLeft, Waypoints } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,6 @@ import {
   categorySlug,
 } from "@/lib/garment-categories";
 import { GarmentTools } from "@/app/(app)/garments/[code]/garment-tools";
-import type { SlotOption } from "@/app/(app)/racks/move-garment";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime, formatTime } from "@/lib/dates";
 import { PERMISSIONS } from "@/lib/rbac";
@@ -54,9 +53,6 @@ export default async function GarmentDetailPage({
       garmentType: { select: { name: true, category: true } },
       service: { select: { name: true } },
       branch: { select: { name: true, code: true } },
-      rackSlot: {
-        select: { code: true, label: true, rack: { select: { code: true, name: true } } },
-      },
       lastScannedBy: { select: { name: true } },
       statusHistory: { orderBy: { createdAt: "asc" } },
       scans: {
@@ -69,13 +65,6 @@ export default async function GarmentDetailPage({
       exceptions: {
         orderBy: { reportedAt: "desc" },
         include: { reportedBy: { select: { name: true } } },
-      },
-      locationHistory: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          fromSlot: { select: { code: true, rack: { select: { code: true } } } },
-          toSlot: { select: { code: true, rack: { select: { code: true } } } },
-        },
       },
       tasks: {
         orderBy: { sequence: "asc" },
@@ -102,26 +91,6 @@ export default async function GarmentDetailPage({
   const nextStage = openTask
     ? { stage: openTask.stage, label: STAGE_LABELS[openTask.stage] }
     : null;
-
-  const slotOptions: SlotOption[] = hasPermission(user, PERMISSIONS.RACK_ASSIGN)
-    ? (
-        await prisma.rackSlot.findMany({
-          where: { isActive: true, rack: { branchId: garment.branchId } },
-          orderBy: [{ rack: { code: "asc" } }, { code: "asc" }],
-          select: {
-            id: true,
-            code: true,
-            capacity: true,
-            rack: { select: { code: true } },
-            _count: { select: { garments: true } },
-          },
-        })
-      ).map((slot) => ({
-        id: slot.id,
-        label: `${slot.rack.code}-${slot.code}`,
-        free: Math.max(0, slot.capacity - slot._count.garments),
-      }))
-    : [];
 
   const statusTimeline: TimelineEntry[] = garment.statusHistory.map((entry) => ({
     id: entry.id,
@@ -163,19 +132,6 @@ export default async function GarmentDetailPage({
     tone: scan.outcome === "MATCH" ? "success" : "danger",
   }));
 
-  const locationTimeline: TimelineEntry[] = garment.locationHistory.map((entry) => ({
-    id: entry.id,
-    time: formatTime(entry.createdAt),
-    title: entry.toSlot
-      ? `Moved to ${entry.toSlot.rack.code} · ${entry.toSlot.code}`
-      : "Removed from rack",
-    description: entry.fromSlot
-      ? `From ${entry.fromSlot.rack.code} · ${entry.fromSlot.code}`
-      : null,
-    meta: `${entry.userName ?? "System"} · ${formatDateTime(entry.createdAt)}`,
-    tone: entry.toSlot ? "success" : "default",
-  }));
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -194,16 +150,9 @@ export default async function GarmentDetailPage({
               orderId={garment.order.id}
               currentStage={garment.currentStage}
               nextStage={nextStage}
-              currentSlotLabel={
-                garment.rackSlot
-                  ? `${garment.rackSlot.rack.code}-${garment.rackSlot.code}`
-                  : "the floor"
-              }
-              slots={slotOptions}
               canEdit={hasPermission(user, PERMISSIONS.GARMENT_UPDATE)}
               canUpload={hasPermission(user, PERMISSIONS.GARMENT_PHOTO_UPLOAD)}
               canAdvance={hasPermission(user, PERMISSIONS.PROCESSING_VIEW)}
-              canMove={hasPermission(user, PERMISSIONS.RACK_ASSIGN)}
               canScan={hasPermission(user, PERMISSIONS.GARMENT_SCAN)}
               details={{
                 color: garment.color,
@@ -254,27 +203,16 @@ export default async function GarmentDetailPage({
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
-          <Card
-            className={
-              garment.rackSlot ? "border-success/40 bg-success/5" : undefined
-            }
-          >
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MapPin className="size-4" /> Where is it right now?
+                <Waypoints className="size-4" /> Where is it right now?
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              {garment.rackSlot ? (
-                <p className="text-2xl font-semibold">
-                  {garment.branch.name} → Rack {garment.rackSlot.rack.code} → Slot{" "}
-                  <span className="font-mono">{garment.rackSlot.code}</span>
-                </p>
-              ) : (
-                <p className="text-2xl font-semibold">
-                  On the floor at {STAGE_LABELS[garment.currentStage]}
-                </p>
-              )}
+              <p className="text-2xl font-semibold">
+                {STAGE_LABELS[garment.currentStage]}
+              </p>
               <p className="text-sm text-muted-foreground">
                 {garment.lastScannedAt
                   ? `Last scanned ${formatDateTime(garment.lastScannedAt)}${garment.lastScannedBy ? ` by ${garment.lastScannedBy.name}` : ""}`
@@ -332,7 +270,6 @@ export default async function GarmentDetailPage({
               <TabsTrigger value="history">History</TabsTrigger>
               <TabsTrigger value="scans">Scans ({garment.scans.length})</TabsTrigger>
               <TabsTrigger value="stages">Stages</TabsTrigger>
-              <TabsTrigger value="location">Movement</TabsTrigger>
               <TabsTrigger value="photos">Photos ({garment.photos.length})</TabsTrigger>
             </TabsList>
 
@@ -406,14 +343,6 @@ export default async function GarmentDetailPage({
                       ))}
                     </tbody>
                   </table>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="location">
-              <Card>
-                <CardContent className="pt-5">
-                  <Timeline entries={locationTimeline} />
                 </CardContent>
               </Card>
             </TabsContent>

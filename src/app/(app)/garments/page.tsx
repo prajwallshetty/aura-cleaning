@@ -43,7 +43,6 @@ interface GarmentRow {
   serviceName: string;
   status: GarmentStatus;
   stage: ProcessingStage;
-  slot: string | null;
   lastScannedAt: Date | null;
   scannedBy: string | null;
   branchName: string;
@@ -62,14 +61,11 @@ export default async function GarmentsPage({
   const search = param(params, "q");
   const status = param(params, "status");
   const stage = param(params, "stage");
-  const located = param(params, "located");
 
   const where: Prisma.GarmentWhereInput = {
     ...(branchId ? { branchId } : {}),
     ...(status && status !== "all" ? { status: status as GarmentStatus } : {}),
     ...(stage && stage !== "all" ? { currentStage: stage as ProcessingStage } : {}),
-    ...(located === "yes" ? { rackSlotId: { not: null } } : {}),
-    ...(located === "no" ? { rackSlotId: null } : {}),
     ...(search
       ? {
           OR: [
@@ -93,7 +89,6 @@ export default async function GarmentsPage({
         garmentType: { select: { name: true } },
         service: { select: { name: true } },
         branch: { select: { name: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
         lastScannedBy: { select: { name: true } },
       },
     }),
@@ -111,9 +106,6 @@ export default async function GarmentsPage({
     serviceName: garment.service.name,
     status: garment.status,
     stage: garment.currentStage,
-    slot: garment.rackSlot
-      ? `${garment.rackSlot.rack.code} · ${garment.rackSlot.code}`
-      : null,
     lastScannedAt: garment.lastScannedAt,
     scannedBy: garment.lastScannedBy?.name ?? null,
     branchName: garment.branch.name,
@@ -172,16 +164,6 @@ export default async function GarmentsPage({
       ),
     },
     {
-      key: "location",
-      header: "Location",
-      cell: (row) =>
-        row.slot ? (
-          <span className="font-mono text-sm font-medium text-success">{row.slot}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">On the floor</span>
-        ),
-    },
-    {
       key: "scan",
       header: "Last scan",
       hideOnMobile: true,
@@ -205,7 +187,7 @@ export default async function GarmentsPage({
         actions={
           hasPermission(user, PERMISSIONS.GARMENT_SCAN) ? (
             <Button asChild>
-              <Link href="/garments/scan">
+              <Link href="/scan">
                 <ScanLine /> Scan
               </Link>
             </Button>
@@ -225,14 +207,6 @@ export default async function GarmentsPage({
             name: "stage",
             label: "Stage",
             options: enumOptions(STAGE_ORDER, STAGE_LABELS),
-          },
-          {
-            name: "located",
-            label: "Racked",
-            options: [
-              { value: "yes", label: "On a rack" },
-              { value: "no", label: "Not racked" },
-            ],
           },
           ...(branches.length > 1
             ? [{ name: "branch", label: "Branch", options: branches }]

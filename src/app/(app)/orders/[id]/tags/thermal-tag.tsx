@@ -103,13 +103,6 @@ export function OrderTag({ sheet, widthMm, reprint = false }: TagProps) {
           {sheet.pieceCount} in {sheet.itemCount} line{sheet.itemCount === 1 ? "" : "s"}
         </span>
       </div>
-      {sheet.rackLocation ? (
-        <div className="thermal-row">
-          <span>Rack</span>
-          <span style={{ fontWeight: 700 }}>{sheet.rackLocation}</span>
-        </div>
-      ) : null}
-
       <hr className="thermal-rule" />
 
       <div style={{ fontSize: `${7 * k}pt`, letterSpacing: "0.12em" }}>ITEMS</div>
@@ -208,12 +201,6 @@ export function GarmentTag({
         <span>Due</span>
         <span style={{ fontWeight: 700 }}>{formatDate(sheet.expectedDeliveryAt)}</span>
       </div>
-      {garment.slot ? (
-        <div className="thermal-row">
-          <span>Rack</span>
-          <span style={{ fontWeight: 700 }}>{garment.slot}</span>
-        </div>
-      ) : null}
     </div>
   );
 }

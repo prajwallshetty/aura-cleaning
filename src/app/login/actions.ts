@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { RATE_LIMITS, rateLimit } from "@/lib/rate-limit";
 import { recordAudit } from "@/lib/audit";
 import { flattenZodError, type ActionResult } from "@/lib/action-result";
+import { ROLE_LANDING_PATH } from "@/lib/rbac";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
@@ -86,12 +87,11 @@ export async function loginAction(
     });
   }
 
+  const landing = user ? ROLE_LANDING_PATH[user.role] : "/dashboard";
   const target =
     callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
       ? callbackUrl
-      : user?.role === "DRIVER"
-        ? "/driver"
-        : "/dashboard";
+      : landing;
 
   return { ok: true, data: { redirectTo: target } };
 }

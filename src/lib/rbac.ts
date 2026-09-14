@@ -35,19 +35,13 @@ export const PERMISSIONS = {
   PROCESSING_QC: "processing.qc",
   PROCESSING_PACKING: "processing.packing",
 
-  // Rack & location
-  RACK_VIEW: "racks.view",
-  RACK_MANAGE: "racks.manage",
-  RACK_ASSIGN: "racks.assign",
-
   // Delivery
   DELIVERY_VIEW: "delivery.view",
   DELIVERY_MANAGE: "delivery.manage",
   DELIVERY_ASSIGN_DRIVER: "delivery.assign_driver",
-  DELIVERY_DRIVE: "delivery.drive",
   DELIVERY_COLLECT_PAYMENT: "delivery.collect_payment",
 
-  // Billing
+  // Billing / Payments
   BILLING_VIEW: "billing.view",
   BILLING_CREATE_INVOICE: "billing.create_invoice",
   BILLING_RECORD_PAYMENT: "billing.record_payment",
@@ -127,111 +121,116 @@ export const PERMISSION_MODULES: Record<PermissionCode, string> = Object.values(
 
 const P = PERMISSIONS;
 
-const COUNTER_STAFF_PERMISSIONS: PermissionCode[] = [
+const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
+
+/**
+ * Manager: full operational and business access. Everything the shop needs to
+ * run day to day — orders, garments, customers, payments, inventory, staff,
+ * reports, scanning and printing — but never RBAC or system settings.
+ */
+const MANAGER_PERMISSIONS: PermissionCode[] = [
   P.DASHBOARD_VIEW,
+  P.DASHBOARD_VIEW_FINANCIALS,
+  P.DASHBOARD_VIEW_ALL_BRANCHES,
+
   P.ORDER_VIEW,
   P.ORDER_CREATE,
   P.ORDER_UPDATE,
+  P.ORDER_DELETE,
+  P.ORDER_CANCEL,
+  P.ORDER_OVERRIDE_PRICE,
   P.ORDER_APPLY_DISCOUNT,
+
   P.GARMENT_VIEW,
   P.GARMENT_SCAN,
   P.GARMENT_UPDATE,
   P.GARMENT_PHOTO_UPLOAD,
-  P.TRACKING_VIEW,
-  P.TRACKING_RESOLVE,
-  P.CUSTOMER_VIEW,
-  P.CUSTOMER_MANAGE,
+
   P.PROCESSING_VIEW,
-  P.RACK_VIEW,
-  P.RACK_ASSIGN,
-  P.DELIVERY_VIEW,
-  P.BILLING_VIEW,
-  P.BILLING_CREATE_INVOICE,
-  P.BILLING_RECORD_PAYMENT,
-  P.COMPLAINT_VIEW,
-  P.COMPLAINT_CREATE,
-  P.NOTIFICATION_VIEW,
-];
-
-/** Shared baseline for every shop-floor processing role. */
-const processingRole = (stage: PermissionCode): PermissionCode[] => [
-  P.DASHBOARD_VIEW,
-  P.ORDER_VIEW,
-  P.GARMENT_VIEW,
-  P.GARMENT_SCAN,
-  P.PROCESSING_VIEW,
-  stage,
-  P.RACK_VIEW,
-  P.TRACKING_VIEW,
-];
-
-const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
-  P.DASHBOARD_VIEW,
-  P.DASHBOARD_VIEW_FINANCIALS,
-  P.DASHBOARD_VIEW_ALL_BRANCHES,
-  P.ORDER_VIEW,
-  P.GARMENT_VIEW,
-  P.TRACKING_VIEW,
-  P.CUSTOMER_VIEW,
-  P.BILLING_VIEW,
-  P.BILLING_CREATE_INVOICE,
-  P.BILLING_RECORD_PAYMENT,
-  P.BILLING_REFUND,
-  P.PURCHASE_VIEW,
-  P.PURCHASE_PAY,
-  P.B2B_VIEW,
-  P.B2B_BILLING,
-  P.EXPENSE_VIEW,
-  P.EXPENSE_MANAGE,
-  P.EXPENSE_APPROVE,
-  P.INVENTORY_VIEW,
-  P.REPORT_VIEW,
-  P.REPORT_SALES,
-  P.REPORT_FINANCE,
-  P.REPORT_OPERATIONS,
-  P.REPORT_EXPORT,
-  P.NOTIFICATION_VIEW,
-];
-
-const BRANCH_MANAGER_PERMISSIONS: PermissionCode[] = [
-  ...COUNTER_STAFF_PERMISSIONS,
-  P.DASHBOARD_VIEW_FINANCIALS,
-  P.ORDER_CANCEL,
-  P.ORDER_OVERRIDE_PRICE,
   P.PROCESSING_SORTING,
   P.PROCESSING_WASHING,
   P.PROCESSING_DRYING,
   P.PROCESSING_IRONING,
   P.PROCESSING_QC,
   P.PROCESSING_PACKING,
-  P.RACK_MANAGE,
+
+  P.DELIVERY_VIEW,
   P.DELIVERY_MANAGE,
   P.DELIVERY_ASSIGN_DRIVER,
   P.DELIVERY_COLLECT_PAYMENT,
+
+  P.BILLING_VIEW,
+  P.BILLING_CREATE_INVOICE,
+  P.BILLING_RECORD_PAYMENT,
   P.BILLING_REFUND,
+
   P.INVENTORY_VIEW,
   P.INVENTORY_MANAGE,
   P.INVENTORY_TRANSFER,
   P.INVENTORY_ADJUST,
+
+  P.TRACKING_VIEW,
+  P.TRACKING_RESOLVE,
+
+  P.CUSTOMER_VIEW,
+  P.CUSTOMER_MANAGE,
+
   P.PURCHASE_VIEW,
   P.PURCHASE_MANAGE,
+  P.PURCHASE_PAY,
+
   P.B2B_VIEW,
+  P.B2B_MANAGE,
+  P.B2B_BILLING,
+
   P.STAFF_VIEW,
   P.STAFF_MANAGE,
   P.STAFF_ATTENDANCE,
   P.STAFF_APPROVE_LEAVE,
+
+  P.COMPLAINT_VIEW,
+  P.COMPLAINT_CREATE,
   P.COMPLAINT_MANAGE,
   P.COMPLAINT_RESOLVE,
+
   P.REPORT_VIEW,
   P.REPORT_SALES,
   P.REPORT_OPERATIONS,
+  P.REPORT_FINANCE,
   P.REPORT_EXPORT,
+
+  P.NOTIFICATION_VIEW,
+  P.NOTIFICATION_MANAGE,
+
   P.EXPENSE_VIEW,
   P.EXPENSE_MANAGE,
-  P.NOTIFICATION_MANAGE,
+  P.EXPENSE_APPROVE,
+
+  // Deliberately excluded: BRANCH_MANAGE, CATALOGUE_MANAGE, SETTINGS_MANAGE,
+  // AUDIT_VIEW, RBAC_MANAGE — sensitive system/RBAC settings stay with Super Admin.
 ];
 
-const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
+/**
+ * Scanner: the counter/laundry scanning role. Scan a garment, see the owner
+ * and order, update the laundry status the scan implies, print the tag, and
+ * move on to the next garment. Nothing administrative.
+ */
+const SCANNER_PERMISSIONS: PermissionCode[] = [
+  P.GARMENT_VIEW,
+  P.GARMENT_SCAN,
+  P.GARMENT_UPDATE,
+  P.ORDER_VIEW,
+  P.CUSTOMER_VIEW,
+  P.TRACKING_VIEW,
+  P.TRACKING_RESOLVE,
+  P.PROCESSING_VIEW,
+  P.PROCESSING_SORTING,
+  P.PROCESSING_WASHING,
+  P.PROCESSING_DRYING,
+  P.PROCESSING_IRONING,
+  P.PROCESSING_QC,
+  P.PROCESSING_PACKING,
+];
 
 /**
  * Default role → permission matrix. Seeded into the database as RolePermission
@@ -239,33 +238,12 @@ const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
  */
 export const ROLE_PERMISSIONS: Record<UserRole, PermissionCode[]> = {
   SUPER_ADMIN: ALL_PERMISSIONS,
-  OWNER: ALL_PERMISSIONS,
-  BRANCH_MANAGER: [...new Set(BRANCH_MANAGER_PERMISSIONS)],
-  COUNTER_STAFF: [...new Set(COUNTER_STAFF_PERMISSIONS)],
-  WASHING_STAFF: [
-    ...processingRole(P.PROCESSING_WASHING),
-    P.PROCESSING_DRYING,
-    P.PROCESSING_SORTING,
-  ],
-  IRONING_STAFF: processingRole(P.PROCESSING_IRONING),
-  QC_STAFF: [...processingRole(P.PROCESSING_QC), P.COMPLAINT_CREATE, P.COMPLAINT_VIEW],
-  PACKING_STAFF: [
-    ...processingRole(P.PROCESSING_PACKING),
-    P.RACK_ASSIGN,
-  ],
-  DRIVER: [
-    P.DASHBOARD_VIEW,
-    P.ORDER_VIEW,
-    P.GARMENT_SCAN,
-    P.DELIVERY_VIEW,
-    P.DELIVERY_DRIVE,
-    P.DELIVERY_COLLECT_PAYMENT,
-  ],
-  ACCOUNTANT: [...new Set(ACCOUNTANT_PERMISSIONS)],
+  MANAGER: [...new Set(MANAGER_PERMISSIONS)],
+  SCANNER: [...new Set(SCANNER_PERMISSIONS)],
 };
 
 /** Roles that may see data across every branch rather than just their own. */
-export const GLOBAL_ROLES: UserRole[] = ["SUPER_ADMIN", "OWNER", "ACCOUNTANT"];
+export const GLOBAL_ROLES: UserRole[] = ["SUPER_ADMIN"];
 
 export function isGlobalRole(role: UserRole): boolean {
   return GLOBAL_ROLES.includes(role);
@@ -277,15 +255,15 @@ export function defaultPermissionsFor(role: UserRole): PermissionCode[] {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
-  OWNER: "Owner",
-  BRANCH_MANAGER: "Branch Manager",
-  COUNTER_STAFF: "Counter Staff",
-  WASHING_STAFF: "Washing Staff",
-  IRONING_STAFF: "Ironing Staff",
-  QC_STAFF: "QC Staff",
-  PACKING_STAFF: "Packing Staff",
-  DRIVER: "Driver",
-  ACCOUNTANT: "Accountant",
+  MANAGER: "Manager",
+  SCANNER: "Scanner",
+};
+
+/** Where a user of this role should land right after login. */
+export const ROLE_LANDING_PATH: Record<UserRole, string> = {
+  SUPER_ADMIN: "/dashboard",
+  MANAGER: "/dashboard",
+  SCANNER: "/scan",
 };
 
 export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
@@ -301,9 +279,9 @@ export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   [P.ORDER_APPLY_DISCOUNT]: "Apply discounts to orders",
   [P.GARMENT_VIEW]: "View garments and their history",
   [P.GARMENT_SCAN]: "Scan garment QR codes and barcodes",
-  [P.GARMENT_UPDATE]: "Edit garment details",
+  [P.GARMENT_UPDATE]: "Edit garment details and laundry status",
   [P.GARMENT_PHOTO_UPLOAD]: "Upload garment photos",
-  [P.TRACKING_VIEW]: "See garment categories, live locations and the mismatch centre",
+  [P.TRACKING_VIEW]: "See garment categories and the mismatch centre",
   [P.TRACKING_RESOLVE]: "Report missing garments and clear mismatches",
   [P.CUSTOMER_VIEW]: "View the customer directory and order history",
   [P.CUSTOMER_MANAGE]: "Add and edit customer records",
@@ -314,13 +292,9 @@ export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   [P.PROCESSING_IRONING]: "Operate the ironing workstation",
   [P.PROCESSING_QC]: "Operate quality control",
   [P.PROCESSING_PACKING]: "Operate the packing workstation",
-  [P.RACK_VIEW]: "View racks and slots",
-  [P.RACK_MANAGE]: "Create and edit racks and slots",
-  [P.RACK_ASSIGN]: "Assign orders and garments to slots",
   [P.DELIVERY_VIEW]: "View pickups and deliveries",
   [P.DELIVERY_MANAGE]: "Create and edit pickups and deliveries",
   [P.DELIVERY_ASSIGN_DRIVER]: "Assign drivers to jobs",
-  [P.DELIVERY_DRIVE]: "Act on assigned driver jobs",
   [P.DELIVERY_COLLECT_PAYMENT]: "Collect payment on delivery",
   [P.BILLING_VIEW]: "View invoices and payments",
   [P.BILLING_CREATE_INVOICE]: "Generate invoices",

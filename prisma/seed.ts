@@ -3,9 +3,9 @@
  *
  * Builds a small but realistic laundry business: a head office, two branches
  * and a central processing unit, a full staff roster covering every role, a
- * priced catalogue, racks with slots, corporate contracts, consumables — and
- * then books real orders and walks a share of their garments through the
- * pipeline so every screen has something truthful to show.
+ * priced catalogue, corporate contracts, consumables — and then books real
+ * orders and walks a share of their garments through the pipeline so every
+ * screen has something truthful to show.
  *
  * Safe to re-run: it clears the transactional tables first.
  */
@@ -95,7 +95,6 @@ async function clearTransactionalData() {
     prisma.processingHistory.deleteMany(),
     prisma.processingTask.deleteMany(),
     prisma.processingBatch.deleteMany(),
-    prisma.garmentLocationHistory.deleteMany(),
     prisma.garmentStatusHistory.deleteMany(),
     prisma.garmentPhoto.deleteMany(),
     prisma.garment.deleteMany(),
@@ -279,6 +278,7 @@ interface SeededUser {
   email: string;
   role: UserRole;
   branchId: string | null;
+  employeeCode: string | null;
 }
 
 async function seedUsers(branches: {
@@ -311,8 +311,8 @@ async function seedUsers(branches: {
     {
       employeeCode: "EMP0002",
       name: "Sunita Rao",
-      email: "owner@auralaundry.example",
-      role: "OWNER",
+      email: "manager@auralaundry.example",
+      role: "MANAGER",
       branchId: branches.headOffice.id,
       department: "Leadership",
       designation: "Proprietor",
@@ -320,8 +320,8 @@ async function seedUsers(branches: {
     {
       employeeCode: "EMP0003",
       name: "Deepak Menon",
-      email: "manager@auralaundry.example",
-      role: "BRANCH_MANAGER",
+      email: "manager2@auralaundry.example",
+      role: "MANAGER",
       branchId: branches.branch1.id,
       department: "Operations",
       designation: "Branch Manager",
@@ -329,17 +329,26 @@ async function seedUsers(branches: {
     {
       employeeCode: "EMP0004",
       name: "Rekha Pillai",
-      email: "manager2@auralaundry.example",
-      role: "BRANCH_MANAGER",
+      email: "manager3@auralaundry.example",
+      role: "MANAGER",
       branchId: branches.branch2.id,
       department: "Operations",
       designation: "Branch Manager",
     },
     {
+      employeeCode: "EMP0013",
+      name: "Nandini Bhat",
+      email: "accountant@auralaundry.example",
+      role: "MANAGER",
+      branchId: branches.headOffice.id,
+      department: "Finance",
+      designation: "Accountant",
+    },
+    {
       employeeCode: "EMP0005",
       name: "Anjali Verma",
       email: "counter@auralaundry.example",
-      role: "COUNTER_STAFF",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Front Desk",
       designation: "Counter Executive",
@@ -348,7 +357,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0006",
       name: "Suresh Kumar",
       email: "counter2@auralaundry.example",
-      role: "COUNTER_STAFF",
+      role: "SCANNER",
       branchId: branches.branch2.id,
       department: "Front Desk",
       designation: "Counter Executive",
@@ -357,7 +366,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0007",
       name: "Mahesh Gowda",
       email: "washing@auralaundry.example",
-      role: "WASHING_STAFF",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
       designation: "Washing Operator",
@@ -366,7 +375,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0008",
       name: "Lalita Devi",
       email: "ironing@auralaundry.example",
-      role: "IRONING_STAFF",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
       designation: "Ironing Operator",
@@ -375,7 +384,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0009",
       name: "Fatima Sheikh",
       email: "qc@auralaundry.example",
-      role: "QC_STAFF",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Quality",
       designation: "Quality Inspector",
@@ -384,7 +393,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0010",
       name: "Joseph Dsouza",
       email: "packing@auralaundry.example",
-      role: "PACKING_STAFF",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
       designation: "Packing Operator",
@@ -393,7 +402,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0011",
       name: "Ganesh Naik",
       email: "driver@auralaundry.example",
-      role: "DRIVER",
+      role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Logistics",
       designation: "Delivery Executive",
@@ -407,7 +416,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0012",
       name: "Prakash Shetty",
       email: "driver2@auralaundry.example",
-      role: "DRIVER",
+      role: "SCANNER",
       branchId: branches.branch2.id,
       department: "Logistics",
       designation: "Delivery Executive",
@@ -418,19 +427,10 @@ async function seedUsers(branches: {
       },
     },
     {
-      employeeCode: "EMP0013",
-      name: "Nandini Bhat",
-      email: "accountant@auralaundry.example",
-      role: "ACCOUNTANT",
-      branchId: branches.headOffice.id,
-      department: "Finance",
-      designation: "Accountant",
-    },
-    {
       employeeCode: "EMP0014",
       name: "Imtiaz Ali",
       email: "cpu@auralaundry.example",
-      role: "WASHING_STAFF",
+      role: "SCANNER",
       branchId: branches.cpu.id,
       department: "Production",
       designation: "Senior Washing Operator",
@@ -461,7 +461,7 @@ async function seedUsers(branches: {
         ...(definition.driver ? { driver: { create: definition.driver } } : {}),
       },
       update: { passwordHash, role: definition.role, branchId: definition.branchId },
-      select: { id: true, name: true, email: true, role: true, branchId: true },
+      select: { id: true, name: true, email: true, role: true, branchId: true, employeeCode: true },
     });
     users.push(user);
   }
@@ -593,43 +593,6 @@ async function seedCatalogue() {
     `  ${createdServices.length} services, ${createdTypes.length} garment types, ${rates.length} rates`,
   );
   return { services: createdServices, garmentTypes: createdTypes };
-}
-
-async function seedRacks(branchIds: { id: string; code: string }[]) {
-  const existing = await prisma.rack.count();
-  if (existing > 0) {
-    return prisma.rackSlot.findMany({ include: { rack: true } });
-  }
-
-  for (const branch of branchIds) {
-    for (const [index, rackCode] of ["A", "B", "C"].entries()) {
-      const rack = await prisma.rack.create({
-        data: {
-          branchId: branch.id,
-          code: rackCode,
-          name:
-            index === 0
-              ? "Ready for collection"
-              : index === 1
-                ? "Awaiting delivery"
-                : "Long-stay storage",
-          description: `Rack ${rackCode} at ${branch.code}`,
-        },
-      });
-
-      await prisma.rackSlot.createMany({
-        data: Array.from({ length: 20 }, (_, slotIndex) => ({
-          rackId: rack.id,
-          code: `${rackCode}${String(slotIndex + 1).padStart(2, "0")}`,
-          capacity: 20,
-        })),
-      });
-    }
-  }
-
-  const slots = await prisma.rackSlot.findMany({ include: { rack: true } });
-  console.log(`  ${slots.length} rack slots across ${branchIds.length} branches`);
-  return slots;
 }
 
 async function seedInventory(branchIds: string[]) {
@@ -1070,8 +1033,8 @@ interface SeededGarment {
  * Plants the four problems the mismatch centre is built to catch, on real
  * garments, so the screen has something true to show on a fresh install:
  * a piece scanned against someone else's order, the same piece scanned twice
- * at one station, a piece filed on the wrong rack, and a piece reported
- * missing outright.
+ * at one station, a piece read into the wrong category's bucket, and a piece
+ * reported missing outright.
  */
 async function seedGarmentAnomalies(
   garments: SeededGarment[],
@@ -1138,27 +1101,20 @@ async function seedGarmentAnomalies(
     planted += 1;
   }
 
-  // 3. Filed somewhere its order-mates are not.
-  const strays = take(2);
-  for (const garment of strays) {
-    const elsewhere = await prisma.rackSlot.findFirst({
-      where: { rack: { branchId: garment.branchId } },
-      orderBy: { code: "desc" },
-      select: { id: true, code: true },
-    });
-    if (!elsewhere) continue;
-    await prisma.garment.update({
-      where: { id: garment.id },
-      data: { rackSlotId: elsewhere.id },
-    });
-    await prisma.garmentException.create({
+  // 3. Read from the wrong category bucket at a station.
+  for (const garment of take(2)) {
+    await prisma.garmentScan.create({
       data: {
         garmentId: garment.id,
+        orderId: garment.orderId,
+        contextOrderId: garment.orderId,
         branchId: garment.branchId,
-        type: "WRONG_LOCATION",
-        detail: `Found on ${elsewhere.code}, away from the rest of the order`,
-        reportedById: counterUserId,
-        reportedAt: hoursFrom(garment.scannedAt, 1),
+        trackingCategory: garment.trackingCategory,
+        stage: garment.stage,
+        outcome: "WRONG_CATEGORY",
+        note: "Scanned into the wrong category's bucket",
+        scannedById: counterUserId,
+        scannedAt: hoursFrom(garment.scannedAt, 0.3),
       },
     });
     planted += 1;
@@ -1207,16 +1163,15 @@ async function seedOrders(context: {
   services: { id: string; code: string; pricingMode: string; basePrice: unknown; stages: string[]; turnaroundHours: number }[];
   garmentTypes: { id: string; code: string; name: string }[];
   users: SeededUser[];
-  slots: { id: string; code: string; rackId: string }[];
   b2bAccounts: { id: string; code: string; businessName: string; phone: string }[];
 }) {
-  const { branches, services, garmentTypes, users, slots, b2bAccounts } = context;
+  const { branches, services, garmentTypes, users, b2bAccounts } = context;
 
-  const counter = users.find((user) => user.role === "COUNTER_STAFF")!;
-  const washer = users.find((user) => user.role === "WASHING_STAFF")!;
-  const ironer = users.find((user) => user.role === "IRONING_STAFF")!;
-  const qc = users.find((user) => user.role === "QC_STAFF")!;
-  const packer = users.find((user) => user.role === "PACKING_STAFF")!;
+  const counter = users.find((user) => user.employeeCode === "EMP0005")!;
+  const washer = users.find((user) => user.employeeCode === "EMP0007")!;
+  const ironer = users.find((user) => user.employeeCode === "EMP0008")!;
+  const qc = users.find((user) => user.employeeCode === "EMP0009")!;
+  const packer = users.find((user) => user.employeeCode === "EMP0010")!;
   const drivers = await prisma.driver.findMany({ include: { user: true } });
 
   const rates = await prisma.serviceRate.findMany();
@@ -1290,7 +1245,6 @@ async function seedOrders(context: {
   let paymentCounter = 0;
   let deliveryCounter = 0;
   let pickupCounter = 0;
-  const slotOccupancy = new Map<string, number>();
   const createdOrders: { id: string; orderNumber: string; branchId: string }[] = [];
 
   // A directory per branch, sized so roughly half the orders land on a repeat
@@ -1595,14 +1549,6 @@ async function seedOrders(context: {
       }
     };
 
-    const orderSlot =
-      plan.progress === "ready"
-        ? slots.filter((slot) => {
-            const used = slotOccupancy.get(slot.id) ?? 0;
-            return used < 12;
-          })[randomInt(0, 9)] ?? slots[0]
-        : null;
-
     let laggardStage: ProcessingStage = "DISPATCH";
     let laggardRank = STAGE_ORDER.length;
     let laggardStatus: GarmentStatus = "RECEIVED";
@@ -1696,11 +1642,7 @@ async function seedOrders(context: {
           };
         });
 
-        let rackSlotId: string | null = null;
-
-        if (plan.progress === "ready" && orderSlot) {
-          rackSlotId = orderSlot.id;
-          slotOccupancy.set(orderSlot.id, (slotOccupancy.get(orderSlot.id) ?? 0) + 1);
+        if (plan.progress === "ready") {
           cursor = progressedTo(cursor, 0.5);
           history.push({
             fromStatus: currentStatus,
@@ -1709,7 +1651,7 @@ async function seedOrders(context: {
             userId: packer.id,
             userName: packer.name,
             createdAt: cursor,
-            note: `Filed to slot ${orderSlot.code}`,
+            note: "Packed and ready for pickup",
           });
           currentStatus = "READY";
           currentStage = "PACKING";
@@ -1744,7 +1686,6 @@ async function seedOrders(context: {
             status: currentStatus,
             currentStage,
             color: pick(["White", "Blue", "Black", "Beige", "Maroon", "Grey"]),
-            rackSlotId,
             lastScannedAt: cursor,
             lastScannedById: operatorFor[currentStage] ? operatorFor[currentStage].id : counter.id,
             deliveredAt: plan.progress === "delivered" ? cursor : null,
@@ -1777,7 +1718,7 @@ async function seedOrders(context: {
             trackingCategory,
             stage: entry.stage,
             outcome: "MATCH",
-            location: entry.stage === "PACKING" && orderSlot ? orderSlot.code : null,
+            location: null,
             scannedById: entry.userId,
             scannedAt: entry.createdAt,
           });
@@ -1793,20 +1734,6 @@ async function seedOrders(context: {
           status: currentStatus,
           scannedAt: cursor,
         });
-
-        if (rackSlotId) {
-          await prisma.garmentLocationHistory.create({
-            data: {
-              garmentId: garment.id,
-              toSlotId: rackSlotId,
-              branchId: branch.id,
-              userId: packer.id,
-              userName: packer.name,
-              note: "Filed after packing",
-              createdAt: cursor,
-            },
-          });
-        }
 
         // Track the station the slowest garment is queued at, exactly as
         // recomputeOrderStatus does at runtime.
@@ -1848,7 +1775,6 @@ async function seedOrders(context: {
       where: { id: order.id },
       data: {
         status: orderStatus,
-        rackSlotId: orderSlot?.id ?? null,
         readyAt:
           plan.progress === "ready" || plan.progress === "delivered"
             ? progressedTo(placedAt, turnaround - 4)
@@ -1970,8 +1896,8 @@ async function seedComplaints(
   orders: { id: string; orderNumber: string; branchId: string }[],
   users: SeededUser[],
 ) {
-  const manager = users.find((user) => user.role === "BRANCH_MANAGER")!;
-  const qc = users.find((user) => user.role === "QC_STAFF")!;
+  const manager = users.find((user) => user.employeeCode === "EMP0003")!;
+  const qc = users.find((user) => user.employeeCode === "EMP0009")!;
 
   const samples = [
     {
@@ -2065,8 +1991,8 @@ async function seedExpensesAndAttendance(
   branches: { id: string; code: string }[],
   users: SeededUser[],
 ) {
-  const owner = users.find((user) => user.role === "OWNER")!;
-  const accountant = users.find((user) => user.role === "ACCOUNTANT")!;
+  const owner = users.find((user) => user.employeeCode === "EMP0002")!;
+  const accountant = users.find((user) => user.employeeCode === "EMP0013")!;
 
   const categories = [
     ["RENT", 45000, "Monthly branch rent"],
@@ -2138,7 +2064,7 @@ async function seedExpensesAndAttendance(
 
   await prisma.leave.create({
     data: {
-      userId: users.find((user) => user.role === "IRONING_STAFF")!.id,
+      userId: users.find((user) => user.employeeCode === "EMP0008")!.id,
       type: "CASUAL",
       fromDate: daysAgo(-3),
       toDate: daysAgo(-1),
@@ -2180,9 +2106,6 @@ async function main() {
   console.log("Catalogue…");
   const catalogue = await seedCatalogue();
 
-  console.log("Racks…");
-  const slots = await seedRacks(operatingBranches);
-
   console.log("Inventory…");
   const items = await seedInventory(operatingBranches.map((branch) => branch.id));
 
@@ -2190,7 +2113,7 @@ async function main() {
   await seedSuppliers(
     branches.branch1.id,
     items,
-    users.find((user) => user.role === "BRANCH_MANAGER")!.id,
+    users.find((user) => user.employeeCode === "EMP0003")!.id,
   );
 
   console.log("Corporate accounts…");
@@ -2216,11 +2139,6 @@ async function main() {
     })),
     garmentTypes: catalogue.garmentTypes,
     users,
-    slots: slots.map((slot) => ({
-      id: slot.id,
-      code: slot.code,
-      rackId: slot.rackId,
-    })),
     b2bAccounts: b2bAccounts.map((account) => ({
       id: account.id,
       code: account.code,
@@ -2237,15 +2155,16 @@ async function main() {
 
   console.log("\nDone. Sign in with any of these — password: " + DEMO_PASSWORD);
   console.log("  superadmin@auralaundry.example   Super Admin");
-  console.log("  owner@auralaundry.example        Owner");
-  console.log("  manager@auralaundry.example      Branch Manager");
-  console.log("  counter@auralaundry.example      Counter Staff");
-  console.log("  washing@auralaundry.example      Washing Staff");
-  console.log("  ironing@auralaundry.example      Ironing Staff");
-  console.log("  qc@auralaundry.example           QC Staff");
-  console.log("  packing@auralaundry.example      Packing Staff");
-  console.log("  driver@auralaundry.example       Driver");
-  console.log("  accountant@auralaundry.example   Accountant");
+  console.log("  manager@auralaundry.example      Manager");
+  console.log("  manager2@auralaundry.example     Manager (Branch 1)");
+  console.log("  manager3@auralaundry.example     Manager (Branch 2)");
+  console.log("  accountant@auralaundry.example   Manager (Finance)");
+  console.log("  counter@auralaundry.example      Scanner");
+  console.log("  washing@auralaundry.example      Scanner");
+  console.log("  ironing@auralaundry.example      Scanner");
+  console.log("  qc@auralaundry.example           Scanner");
+  console.log("  packing@auralaundry.example      Scanner");
+  console.log("  driver@auralaundry.example       Scanner");
 }
 
 main()

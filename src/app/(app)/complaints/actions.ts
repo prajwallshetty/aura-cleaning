@@ -251,7 +251,6 @@ export async function resolveComplaintAction(payload: unknown): Promise<ActionRe
             data: {
               status: input.resolution === "REWASH" ? "REWASH" : "REWORK",
               currentStage: targetStage,
-              rackSlotId: null,
               ...(input.resolution === "REWASH"
                 ? { rewashCount: { increment: 1 } }
                 : { reworkCount: { increment: 1 } }),

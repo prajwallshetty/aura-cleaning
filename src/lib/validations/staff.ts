@@ -11,18 +11,7 @@ import {
   optionalText,
 } from "@/lib/validations/common";
 
-export const userRoleSchema = z.enum([
-  "SUPER_ADMIN",
-  "OWNER",
-  "BRANCH_MANAGER",
-  "COUNTER_STAFF",
-  "WASHING_STAFF",
-  "IRONING_STAFF",
-  "QC_STAFF",
-  "PACKING_STAFF",
-  "DRIVER",
-  "ACCOUNTANT",
-]);
+export const userRoleSchema = z.enum(["SUPER_ADMIN", "MANAGER", "SCANNER"]);
 
 export const createStaffSchema = z.object({
   name: z.string().trim().min(2, "Name is required").max(120),

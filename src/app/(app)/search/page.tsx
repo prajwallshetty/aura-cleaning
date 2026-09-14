@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { MapPin, Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -38,7 +38,7 @@ export default async function SearchPage({
         <EmptyState
           icon={SearchIcon}
           title="Search anything"
-          description="A garment id (TR-1042), an order number (ORD10245), a category name (trousers), a rack slot (B17), or a customer's name or phone number."
+          description="A garment id (TR-1042), an order number (ORD10245), a category name (trousers), or a customer's name or phone number."
         />
       </div>
     );
@@ -67,7 +67,7 @@ export default async function SearchPage({
   const upper = query.toUpperCase();
   const branchFilter = branchId ? { branchId } : {};
 
-  const [orders, garments, slots, customers] = await Promise.all([
+  const [orders, garments, customers] = await Promise.all([
     prisma.order.findMany({
       where: {
         ...branchFilter,
@@ -81,7 +81,6 @@ export default async function SearchPage({
       take: 20,
       include: {
         branch: { select: { name: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
       },
     }),
     prisma.garment.findMany({
@@ -98,18 +97,6 @@ export default async function SearchPage({
       include: {
         order: { select: { id: true, orderNumber: true, customerName: true } },
         garmentType: { select: { name: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
-      },
-    }),
-    prisma.rackSlot.findMany({
-      where: {
-        code: { contains: upper },
-        rack: { ...(branchId ? { branchId } : {}) },
-      },
-      take: 10,
-      include: {
-        rack: { select: { id: true, code: true, name: true, branch: { select: { name: true } } } },
-        _count: { select: { garments: true } },
       },
     }),
     hasPermission(user, PERMISSIONS.CUSTOMER_VIEW)
@@ -140,16 +127,13 @@ export default async function SearchPage({
     PERMISSIONS.DASHBOARD_VIEW_FINANCIALS,
   ]);
   const nothingFound =
-    orders.length === 0 &&
-    garments.length === 0 &&
-    slots.length === 0 &&
-    customers.length === 0;
+    orders.length === 0 && garments.length === 0 && customers.length === 0;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={`Results for “${query}”`}
-        description={`${garments.length} garments · ${orders.length} orders · ${customers.length} customers · ${slots.length} rack slots`}
+        description={`${garments.length} garments · ${orders.length} orders · ${customers.length} customers`}
       />
 
       {nothingFound ? (
@@ -228,16 +212,9 @@ export default async function SearchPage({
                     status={garment.status}
                     label={GARMENT_STATUS_LABELS[garment.status]}
                   />
-                  {garment.rackSlot ? (
-                    <span className="flex items-center gap-1 font-mono text-xs font-medium text-success">
-                      <MapPin className="size-3" />
-                      {garment.rackSlot.rack.code} · {garment.rackSlot.code}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {STAGE_LABELS[garment.currentStage]}
-                    </span>
-                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {STAGE_LABELS[garment.currentStage]}
+                  </span>
                 </div>
               </Link>
             ))}
@@ -266,45 +243,12 @@ export default async function SearchPage({
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={order.status} dot />
-                  {order.rackSlot ? (
-                    <span className="flex items-center gap-1 font-mono text-xs font-medium text-success">
-                      <MapPin className="size-3" />
-                      {order.rackSlot.rack.code} · {order.rackSlot.code}
-                    </span>
-                  ) : null}
                   {canSeeMoney ? (
                     <span className="numeric text-xs">
                       {formatCurrency(order.totalAmount)}
                     </span>
                   ) : null}
                 </div>
-              </Link>
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {slots.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Rack slots</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {slots.map((slot) => (
-              <Link
-                key={slot.id}
-                href={`/racks/${slot.rack.id}?slot=${slot.id}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2.5 text-sm hover:bg-muted/40"
-              >
-                <span className="font-mono font-semibold">
-                  {slot.rack.code} · {slot.code}
-                </span>
-                <span className="text-muted-foreground">
-                  {slot.rack.name} · {slot.rack.branch.name}
-                </span>
-                <span className="numeric text-xs">
-                  {slot._count.garments}/{slot.capacity} garments
-                </span>
               </Link>
             ))}
           </CardContent>

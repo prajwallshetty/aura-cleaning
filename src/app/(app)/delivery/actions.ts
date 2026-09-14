@@ -24,7 +24,6 @@ import { formatCurrency, num, round2 } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import { nextDeliveryNumber, nextPaymentNumber } from "@/lib/sequence";
 import {
-  moveGarmentToSlot,
   recomputeOrderStatus,
   recordGarmentStatus,
 } from "@/lib/services/garments";
@@ -178,7 +177,7 @@ export async function assignDriverAction(payload: unknown): Promise<ActionResult
 
 export async function advancePickupAction(payload: unknown): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const user = await authorize([PERMISSIONS.DELIVERY_MANAGE, PERMISSIONS.DELIVERY_DRIVE]);
+    const user = await authorize(PERMISSIONS.DELIVERY_MANAGE);
     const input = advancePickupSchema.parse(payload);
 
     const pickup = await prisma.pickup.findUnique({
@@ -235,7 +234,7 @@ export async function advancePickupAction(payload: unknown): Promise<ActionResul
 
 export async function dispatchDeliveryAction(payload: unknown): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const user = await authorize([PERMISSIONS.DELIVERY_MANAGE, PERMISSIONS.DELIVERY_DRIVE]);
+    const user = await authorize(PERMISSIONS.DELIVERY_MANAGE);
     const input = dispatchSchema.parse(payload);
 
     const delivery = await prisma.delivery.findUnique({
@@ -337,7 +336,7 @@ export async function dispatchDeliveryAction(payload: unknown): Promise<ActionRe
  */
 export async function completeDeliveryAction(payload: unknown): Promise<ActionResult<null>> {
   return runAction(async () => {
-    const user = await authorize([PERMISSIONS.DELIVERY_MANAGE, PERMISSIONS.DELIVERY_DRIVE]);
+    const user = await authorize(PERMISSIONS.DELIVERY_MANAGE);
     const input = completeDeliverySchema.parse(payload);
 
     const delivery = await prisma.delivery.findUnique({
@@ -435,20 +434,10 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
             orderId: delivery.orderId,
             status: { notIn: ["DELIVERED", "LOST"] },
           },
-          select: { id: true, status: true, rackSlotId: true },
+          select: { id: true, status: true },
         });
 
         for (const garment of garments) {
-          if (garment.rackSlotId) {
-            await moveGarmentToSlot(tx, {
-              garmentId: garment.id,
-              fromSlotId: garment.rackSlotId,
-              toSlotId: null,
-              actor: { userId: user.id, userName: user.name, branchId: delivery.branchId },
-              note: "Handed to customer",
-            });
-          }
-
           await recordGarmentStatus(tx, {
             garmentId: garment.id,
             fromStatus: garment.status,
@@ -467,11 +456,6 @@ export async function completeDeliveryAction(payload: unknown): Promise<ActionRe
             status: { in: ["PENDING", "IN_PROGRESS"] },
           },
           data: { status: "COMPLETED", completedAt: now },
-        });
-
-        await tx.order.update({
-          where: { id: delivery.orderId },
-          data: { rackSlotId: null },
         });
 
         await recomputeOrderStatus(tx, delivery.orderId, {

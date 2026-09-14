@@ -43,7 +43,6 @@ interface GarmentRow {
   serviceName: string;
   status: string;
   stage: string;
-  slot: string | null;
   lastScannedAt: Date | null;
   scannedBy: string | null;
 }
@@ -62,7 +61,6 @@ export default async function OrderDetailPage({
       branch: { select: { id: true, name: true, code: true } },
       b2bAccount: { select: { id: true, businessName: true, code: true } },
       createdBy: { select: { name: true } },
-      rackSlot: { select: { code: true, rack: { select: { code: true, name: true } } } },
       items: {
         include: {
           service: { select: { name: true } },
@@ -74,7 +72,6 @@ export default async function OrderDetailPage({
         include: {
           garmentType: { select: { name: true } },
           service: { select: { name: true } },
-          rackSlot: { select: { code: true, rack: { select: { code: true } } } },
           lastScannedBy: { select: { name: true } },
         },
       },
@@ -112,9 +109,6 @@ export default async function OrderDetailPage({
     serviceName: garment.service.name,
     status: garment.status,
     stage: garment.currentStage,
-    slot: garment.rackSlot
-      ? `${garment.rackSlot.rack.code}${garment.rackSlot.code.replace(garment.rackSlot.rack.code, "")}`
-      : null,
     lastScannedAt: garment.lastScannedAt,
     scannedBy: garment.lastScannedBy?.name ?? null,
   }));
@@ -159,16 +153,6 @@ export default async function OrderDetailPage({
           {STAGE_LABELS[row.stage as keyof typeof STAGE_LABELS]}
         </span>
       ),
-    },
-    {
-      key: "slot",
-      header: "Location",
-      cell: (row) =>
-        row.slot ? (
-          <span className="font-mono text-sm font-medium">{row.slot}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">In process</span>
-        ),
     },
     {
       key: "scan",
@@ -271,12 +255,6 @@ export default async function OrderDetailPage({
               <CardTitle className="flex items-center gap-2">
                 <Shirt className="size-4" /> Garments ({order.garments.length})
               </CardTitle>
-              {order.rackSlot ? (
-                <span className="flex items-center gap-1.5 rounded-md bg-success/12 px-2.5 py-1 text-sm font-medium text-success">
-                  <MapPin className="size-3.5" />
-                  Rack {order.rackSlot.rack.code} · Slot {order.rackSlot.code}
-                </span>
-              ) : null}
             </CardHeader>
             <CardContent>
               <DataTable

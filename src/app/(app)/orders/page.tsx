@@ -56,7 +56,6 @@ interface OrderRow {
   expectedDeliveryAt: Date;
   branchName: string;
   isDelayed: boolean;
-  slot: string | null;
 }
 
 export default async function OrdersPage({
@@ -119,7 +118,6 @@ export default async function OrdersPage({
       take: PAGE_SIZE,
       include: {
         branch: { select: { name: true } },
-        rackSlot: { select: { code: true, rack: { select: { code: true } } } },
       },
     }),
     prisma.order.count({ where }),
@@ -154,7 +152,6 @@ export default async function OrdersPage({
     isDelayed:
       order.expectedDeliveryAt < now &&
       !["DELIVERED", "CANCELLED", "REFUNDED"].includes(order.status),
-    slot: order.rackSlot ? `${order.rackSlot.rack.code}${order.rackSlot.code.replace(order.rackSlot.rack.code, "")}` : null,
   }));
 
   const canCreate = hasPermission(user, PERMISSIONS.ORDER_CREATE);
@@ -202,18 +199,6 @@ export default async function OrdersPage({
           ) : null}
         </div>
       ),
-    },
-    {
-      key: "location",
-      header: "Rack",
-      hideOnMobile: true,
-      toggleLabel: "Rack",
-      cell: (row) =>
-        row.slot ? (
-          <span className="font-mono text-sm">{row.slot}</span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
     },
     {
       key: "placed",

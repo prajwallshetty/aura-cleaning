@@ -39,12 +39,6 @@ export const advanceStageSchema = z.object({
     "SKIPPED",
   ]),
   note: optionalText(500),
-  rackSlotId: z
-    .string()
-    .trim()
-    .transform((value) => (value === "" || value === "none" ? null : value))
-    .nullable()
-    .optional(),
   scannedVia: z.string().optional(),
   /** The order the station had open, so a wrong-order read is caught. */
   contextOrderId: z
@@ -65,11 +59,4 @@ export const markGarmentSchema = z.object({
   garmentId: cuidSchema,
   status: z.enum(["LOST", "DAMAGED", "RETURNED"]),
   note: z.string().trim().min(3, "Describe what happened").max(500),
-});
-
-export const assignSlotSchema = z.object({
-  rackSlotId: cuidSchema,
-  garmentIds: z.array(cuidSchema).optional(),
-  orderId: z.string().optional(),
-  note: z.string().trim().max(300).optional(),
 });

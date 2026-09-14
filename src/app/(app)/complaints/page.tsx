@@ -108,7 +108,7 @@ export default async function ComplaintsPage({
       prisma.user.findMany({
         where: {
           status: "ACTIVE",
-          role: { in: ["BRANCH_MANAGER", "QC_STAFF", "COUNTER_STAFF", "OWNER"] },
+          role: { in: ["SUPER_ADMIN", "MANAGER"] },
           ...(branchId ? { branchId } : {}),
         },
         select: { id: true, name: true },

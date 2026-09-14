@@ -32,7 +32,6 @@ export function AppShell({ user, alerts, children }: AppShellProps) {
     <div className="min-h-dvh bg-background">
       <Sidebar
         permissions={user.permissions}
-        isDriver={user.role === "DRIVER"}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />

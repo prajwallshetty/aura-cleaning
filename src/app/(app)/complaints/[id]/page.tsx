@@ -62,7 +62,7 @@ export default async function ComplaintDetailPage({
   const assignees = await prisma.user.findMany({
     where: {
       status: "ACTIVE",
-      role: { in: ["BRANCH_MANAGER", "QC_STAFF", "COUNTER_STAFF", "OWNER"] },
+      role: { in: ["SUPER_ADMIN", "MANAGER"] },
       ...(complaint.branchId ? { branchId: complaint.branchId } : {}),
     },
     select: { id: true, name: true },

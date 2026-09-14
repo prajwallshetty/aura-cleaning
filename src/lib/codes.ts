@@ -14,7 +14,7 @@ export function buildBarcodeValue(garmentCode: string): string {
 }
 
 export interface ParsedScan {
-  kind: "garment" | "order" | "slot" | "unknown";
+  kind: "garment" | "order" | "unknown";
   value: string;
 }
 
@@ -32,7 +32,6 @@ export function parseScan(raw: string): ParsedScan {
     const [, kind, value] = upper.split(":");
     if (kind === "G" && value) return { kind: "garment", value };
     if (kind === "O" && value) return { kind: "order", value };
-    if (kind === "S" && value) return { kind: "slot", value };
     return { kind: "unknown", value: upper };
   }
 
@@ -40,15 +39,10 @@ export function parseScan(raw: string): ParsedScan {
   if (/^[A-Z]{2}-\d+$/.test(upper)) return { kind: "garment", value: upper };
   if (/^G\d+$/.test(upper)) return { kind: "garment", value: upper };
   if (/^ORD\d+$/.test(upper)) return { kind: "order", value: upper };
-  if (/^[A-Z]\d{2}$/.test(upper)) return { kind: "slot", value: upper };
 
   return { kind: "unknown", value: upper };
 }
 
 export function buildOrderQrPayload(orderNumber: string): string {
   return `${QR_PREFIX}:O:${orderNumber}`;
-}
-
-export function buildSlotQrPayload(slotCode: string): string {
-  return `${QR_PREFIX}:S:${slotCode}`;
 }

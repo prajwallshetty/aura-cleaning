@@ -7,7 +7,6 @@ import {
   STAGE_OUTCOMES,
 } from "@/lib/workflow";
 import {
-  moveGarmentToSlot,
   recomputeOrderStatus,
   recordGarmentStatus,
   type ActorContext,
@@ -27,8 +26,6 @@ export interface AdvanceInput {
   actor: ActorContext;
   note?: string | null;
   scannedVia?: string | null;
-  /** Packing stations can file the garment straight onto a rack slot. */
-  rackSlotId?: string | null;
   /** The order the operator had open, so a wrong-order read is caught here. */
   contextOrderId?: string | null;
   /** The bucket the station is working, so a stray category is caught too. */
@@ -180,28 +177,6 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       }
     }
 
-    // Packing is the hand-off from processing to storage: a packed garment
-    // becomes READY the moment it has a physical home.
-    let slotAssigned = false;
-    if (input.stage === "PACKING" && isTerminalOutcome && input.rackSlotId) {
-      const slot = await tx.rackSlot.findUnique({
-        where: { id: input.rackSlotId },
-        include: { rack: { select: { branchId: true } } },
-      });
-      if (!slot || slot.rack.branchId !== input.actor.branchId) {
-        throw new BusinessRuleError("That rack slot belongs to another branch");
-      }
-      await moveGarmentToSlot(tx, {
-        garmentId: garment.id,
-        fromSlotId: garment.rackSlotId,
-        toSlotId: slot.id,
-        actor: input.actor,
-        note: "Filed after packing",
-      });
-      garmentStatus = "READY";
-      slotAssigned = true;
-    }
-
     // Every station move is a scan, and the scan is what the mismatch centre
     // reads. Recorded before the status change so a wrong-order read is still
     // on the ledger even though the move itself is allowed to stand.
@@ -224,7 +199,6 @@ export async function advanceGarment(input: AdvanceInput): Promise<AdvanceResult
       actor: input.actor,
       note: input.note ?? null,
       scannedVia: input.scannedVia ?? null,
-      extraData: slotAssigned ? {} : undefined,
     });
 
     const orderStatus = await recomputeOrderStatus(

@@ -6,10 +6,14 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock,
+  FileBarChart,
   MessageSquareWarning,
   Package,
   PackageCheck,
+  Receipt,
+  ScanLine,
   Truck,
+  Users,
   Wallet,
 } from "lucide-react";
 
@@ -128,6 +132,14 @@ export default async function DashboardPage({
 
   const now = new Date();
 
+  const quickActions = [
+    { label: "New order", href: "/orders/new", icon: ClipboardList, permission: PERMISSIONS.ORDER_CREATE },
+    { label: "Scan", href: "/scan", icon: ScanLine, permission: PERMISSIONS.GARMENT_SCAN },
+    { label: "Customers", href: "/customers", icon: Users, permission: PERMISSIONS.CUSTOMER_VIEW },
+    { label: "Payments", href: "/billing", icon: Receipt, permission: PERMISSIONS.BILLING_VIEW },
+    { label: "Reports", href: "/reports", icon: FileBarChart, permission: PERMISSIONS.REPORT_VIEW },
+  ].filter((action) => hasPermission(user, action.permission));
+
   return (
     <div className="space-y-5">
       <LiveRefresh intervalMs={20000} />
@@ -142,6 +154,27 @@ export default async function DashboardPage({
           ) : null
         }
       />
+
+      {quickActions.length > 0 ? (
+        <section className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
+          <p className="pl-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Quick actions
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {quickActions.map((action) => (
+              <Link
+                key={action.href}
+                href={action.href}
+                title={action.label}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-accent lift"
+              >
+                <action.icon className="size-3.5" aria-hidden />
+                {action.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <FilterBar
         showSearch={false}

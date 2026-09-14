@@ -156,35 +156,6 @@ export async function recordGarmentStatus(
   });
 }
 
-/** Moves a garment to a rack slot and records the move. */
-export async function moveGarmentToSlot(
-  tx: Tx,
-  params: {
-    garmentId: string;
-    fromSlotId: string | null;
-    toSlotId: string | null;
-    actor: ActorContext;
-    note?: string | null;
-  },
-): Promise<void> {
-  await tx.garment.update({
-    where: { id: params.garmentId },
-    data: { rackSlotId: params.toSlotId },
-  });
-
-  await tx.garmentLocationHistory.create({
-    data: {
-      garmentId: params.garmentId,
-      fromSlotId: params.fromSlotId,
-      toSlotId: params.toSlotId,
-      branchId: params.actor.branchId,
-      userId: params.actor.userId,
-      userName: params.actor.userName,
-      note: params.note ?? null,
-    },
-  });
-}
-
 /** Stage → the order status a customer would be told. */
 const ORDER_STATUS_FOR_STAGE: Record<ProcessingStage, OrderStatus> = {
   RECEIVING: "RECEIVED",

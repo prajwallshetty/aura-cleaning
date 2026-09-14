@@ -82,7 +82,7 @@ export default async function WorkstationPage({
   const requestedStatus = (param(query, "queue") ?? "PENDING").toUpperCase() as TaskStatus;
   const status = QUEUE_TABS.includes(requestedStatus) ? requestedStatus : "PENDING";
 
-  const [tasks, counts, slots] = await Promise.all([
+  const [tasks, counts] = await Promise.all([
     prisma.processingTask.findMany({
       where: {
         stage,
@@ -117,20 +117,6 @@ export default async function WorkstationPage({
       where: { stage, ...(branchId ? { branchId } : {}) },
       _count: { _all: true },
     }),
-    stage === "PACKING"
-      ? prisma.rackSlot.findMany({
-          where: {
-            isActive: true,
-            rack: { isActive: true, ...(branchId ? { branchId } : {}) },
-          },
-          orderBy: [{ rack: { code: "asc" } }, { code: "asc" }],
-          take: 300,
-          include: {
-            rack: { select: { code: true, name: true } },
-            _count: { select: { garments: true } },
-          },
-        })
-      : Promise.resolve([]),
   ]);
 
   const now = new Date();
@@ -214,10 +200,6 @@ export default async function WorkstationPage({
         stageLabel={STAGE_LABELS[stage]}
         items={items}
         outcomes={outcomes}
-        slots={slots.map((slot) => ({
-          id: slot.id,
-          label: `${slot.rack.code} · ${slot.code} (${slot._count.garments}/${slot.capacity})`,
-        }))}
         canOperate={canOperate}
         waitingUpstream={waitingUpstream}
       />

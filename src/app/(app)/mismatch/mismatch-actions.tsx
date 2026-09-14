@@ -7,7 +7,6 @@ import {
   ArrowRightLeft,
   Check,
   ExternalLink,
-  MapPin,
   ScanLine,
   TriangleAlert,
 } from "lucide-react";
@@ -29,7 +28,6 @@ import { Label } from "@/components/ui/label";
 import {
   correctOrderAction,
   dismissMismatchAction,
-  moveGarmentAction,
   reportMissingAction,
   rescanGarmentAction,
 } from "./actions";
@@ -40,7 +38,6 @@ interface Props {
   orderId: string;
   orderNumber: string;
   canResolve: boolean;
-  canMove: boolean;
   canReassign: boolean;
   isMissing: boolean;
 }
@@ -56,7 +53,6 @@ export function MismatchActions({
   orderId,
   orderNumber,
   canResolve,
-  canMove,
   canReassign,
   isMissing,
 }: Props) {
@@ -98,22 +94,6 @@ export function MismatchActions({
           }
         >
           <ScanLine /> Scan again
-        </Button>
-      ) : null}
-
-      {canMove ? (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={pending}
-          onClick={() =>
-            run(
-              () => moveGarmentAction({ garmentId, rackSlotId: "order" }),
-              `${garmentCode} moved back with ${orderNumber}`,
-            )
-          }
-        >
-          <MapPin /> Move garment
         </Button>
       ) : null}
 

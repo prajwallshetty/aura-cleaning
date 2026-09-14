@@ -219,7 +219,6 @@ export default async function CategoryTrackingPage({
     summary.missing +
     summary.wrongOrder +
     summary.wrongGarment +
-    summary.wrongLocation +
     summary.duplicate +
     summary.notScanned;
 
@@ -256,7 +255,6 @@ export default async function CategoryTrackingPage({
         <Tally label="Missing" value={summary.missing} tone="danger" />
         <Tally label="Wrong order" value={summary.wrongOrder} tone="danger" />
         <Tally label="Wrong garment" value={summary.wrongGarment} tone="danger" />
-        <Tally label="Wrong rack" value={summary.wrongLocation} tone="warning" />
         <Tally label="Not scanned" value={summary.notScanned} tone="warning" />
       </div>
 
