@@ -87,68 +87,64 @@ const phone = () => `9${randomInt(100000000, 999999999)}`;
 async function clearTransactionalData() {
   // Ordered so that children go before parents; the schema's cascades handle
   // the rest.
-  await prisma.$transaction([
-    prisma.notificationLog.deleteMany(),
-    prisma.notification.deleteMany(),
-    prisma.complaintAttachment.deleteMany(),
-    prisma.complaint.deleteMany(),
-    prisma.processingHistory.deleteMany(),
-    prisma.processingTask.deleteMany(),
-    prisma.processingBatch.deleteMany(),
-    prisma.garmentStatusHistory.deleteMany(),
-    prisma.garmentPhoto.deleteMany(),
-    prisma.garment.deleteMany(),
-    prisma.delivery.deleteMany(),
-    prisma.pickup.deleteMany(),
-    prisma.refund.deleteMany(),
-    prisma.payment.deleteMany(),
-    prisma.invoiceLine.deleteMany(),
-    prisma.invoice.deleteMany(),
-    prisma.garmentException.deleteMany(),
-    prisma.garmentScan.deleteMany(),
-    prisma.scanEvent.deleteMany(),
-    prisma.orderStatusHistory.deleteMany(),
-    prisma.orderItem.deleteMany(),
-    prisma.order.deleteMany(),
-    prisma.customer.deleteMany(),
-    prisma.goodsReceiptItem.deleteMany(),
-    prisma.goodsReceipt.deleteMany(),
-    prisma.supplierPayment.deleteMany(),
-    prisma.purchaseInvoice.deleteMany(),
-    prisma.purchaseReturnItem.deleteMany(),
-    prisma.purchaseReturn.deleteMany(),
-    prisma.purchaseOrderItem.deleteMany(),
-    prisma.purchaseOrder.deleteMany(),
-    prisma.inventoryTransaction.deleteMany(),
-    prisma.inventoryStock.deleteMany(),
-    prisma.expense.deleteMany(),
-    prisma.b2BStatement.deleteMany(),
-    prisma.b2BRateCard.deleteMany(),
-    prisma.b2BSchedule.deleteMany(),
-    prisma.b2BContract.deleteMany(),
-    prisma.attendance.deleteMany(),
-    prisma.leave.deleteMany(),
-    prisma.auditLog.deleteMany(),
-    prisma.sequence.deleteMany(),
-  ]);
+  await prisma.notificationLog.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.complaintAttachment.deleteMany();
+  await prisma.complaint.deleteMany();
+  await prisma.processingHistory.deleteMany();
+  await prisma.processingTask.deleteMany();
+  await prisma.processingBatch.deleteMany();
+  await prisma.garmentStatusHistory.deleteMany();
+  await prisma.garmentPhoto.deleteMany();
+  await prisma.garment.deleteMany();
+  await prisma.delivery.deleteMany();
+  await prisma.pickup.deleteMany();
+  await prisma.refund.deleteMany();
+  await prisma.payment.deleteMany();
+  await prisma.invoiceLine.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.garmentException.deleteMany();
+  await prisma.garmentScan.deleteMany();
+  await prisma.scanEvent.deleteMany();
+  await prisma.orderStatusHistory.deleteMany();
+  await prisma.orderItem.deleteMany();
+  await prisma.order.deleteMany();
+  await prisma.customer.deleteMany();
+  await prisma.goodsReceiptItem.deleteMany();
+  await prisma.goodsReceipt.deleteMany();
+  await prisma.supplierPayment.deleteMany();
+  await prisma.purchaseInvoice.deleteMany();
+  await prisma.purchaseReturnItem.deleteMany();
+  await prisma.purchaseReturn.deleteMany();
+  await prisma.purchaseOrderItem.deleteMany();
+  await prisma.purchaseOrder.deleteMany();
+  await prisma.inventoryTransaction.deleteMany();
+  await prisma.inventoryStock.deleteMany();
+  await prisma.expense.deleteMany();
+  await prisma.b2BStatement.deleteMany();
+  await prisma.b2BRateCard.deleteMany();
+  await prisma.b2BSchedule.deleteMany();
+  await prisma.b2BContract.deleteMany();
+  await prisma.attendance.deleteMany();
+  await prisma.leave.deleteMany();
+  await prisma.auditLog.deleteMany();
+  await prisma.sequence.deleteMany();
 }
 
 async function seedPermissions() {
   const codes = Object.values(PERMISSIONS);
 
-  await prisma.$transaction(
-    codes.map((code) =>
-      prisma.permission.upsert({
-        where: { code },
-        create: {
-          code,
-          module: code.split(".")[0],
-          description: PERMISSION_DESCRIPTIONS[code] ?? code,
-        },
-        update: { description: PERMISSION_DESCRIPTIONS[code] ?? code },
-      }),
-    ),
-  );
+  for (const code of codes) {
+    await prisma.permission.upsert({
+      where: { code },
+      create: {
+        code,
+        module: code.split(".")[0],
+        description: PERMISSION_DESCRIPTIONS[code] ?? code,
+      },
+      update: { description: PERMISSION_DESCRIPTIONS[code] ?? code },
+    });
+  }
 
   const permissions = await prisma.permission.findMany({
     select: { id: true, code: true },
@@ -175,15 +171,13 @@ async function seedSettings() {
     { key: "low_stock_alerts", value: "true", category: "inventory" },
   ];
 
-  await prisma.$transaction(
-    settings.map((setting) =>
-      prisma.setting.upsert({
-        where: { key: setting.key },
-        create: setting,
-        update: {},
-      }),
-    ),
-  );
+  for (const setting of settings) {
+    await prisma.setting.upsert({
+      where: { key: setting.key },
+      create: setting,
+      update: {},
+    });
+  }
 }
 
 async function seedBranches() {
