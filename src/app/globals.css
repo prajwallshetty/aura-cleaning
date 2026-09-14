@@ -531,6 +531,70 @@
   animation: aura-check 420ms var(--ease-out-quart) 80ms both;
 }
 
+/* The camera scan target on the scan workspace: four bracket corners with a
+   laser line sweeping between them, so the operator knows exactly where to
+   hold the tag. */
+.scan-frame-corner {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-color: var(--primary);
+  border-style: solid;
+  border-width: 0;
+}
+.scan-frame-corner-tl {
+  top: 0;
+  left: 0;
+  border-top-width: 4px;
+  border-left-width: 4px;
+  border-top-left-radius: 8px;
+}
+.scan-frame-corner-tr {
+  top: 0;
+  right: 0;
+  border-top-width: 4px;
+  border-right-width: 4px;
+  border-top-right-radius: 8px;
+}
+.scan-frame-corner-bl {
+  bottom: 0;
+  left: 0;
+  border-bottom-width: 4px;
+  border-left-width: 4px;
+  border-bottom-left-radius: 8px;
+}
+.scan-frame-corner-br {
+  bottom: 0;
+  right: 0;
+  border-bottom-width: 4px;
+  border-right-width: 4px;
+  border-bottom-right-radius: 8px;
+}
+.scan-frame-laser {
+  position: absolute;
+  inset-inline: 6%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--primary),
+    transparent
+  );
+  box-shadow: 0 0 8px 1px color-mix(in oklch, var(--primary) 70%, transparent);
+  animation: aura-scan-laser 1.6s ease-in-out infinite;
+}
+@keyframes aura-scan-laser {
+  0%, 100% {
+    top: 8%;
+    opacity: 0.9;
+  }
+  50% {
+    top: 88%;
+    opacity: 1;
+  }
+}
+
 /* Status pills and progress bars ease between states rather than snapping. */
 [data-slot="status-badge"] {
   transition:
@@ -553,5 +617,8 @@
   }
   .scan-sweep::after {
     display: none;
+  }
+  .scan-frame-laser {
+    top: 50% !important;
   }
 }

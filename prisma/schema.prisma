@@ -435,16 +435,17 @@ model User {
   name         String
   email        String     @unique
   phone        String?
-  passwordHash String
+  /// The single credential used to sign in — a short code entered on the
+  /// access-code screen instead of an email/password pair.
+  accessCode   String     @unique
   role         UserRole   @default(SCANNER)
   status       UserStatus @default(ACTIVE)
   branchId     String?
   branch       Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  image              String?
-  emailVerified      DateTime?
-  lastLoginAt        DateTime?
-  mustChangePassword Boolean   @default(false)
+  image         String?
+  emailVerified DateTime?
+  lastLoginAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

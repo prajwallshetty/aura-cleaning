@@ -19,6 +19,7 @@ const REDACTED_KEYS = new Set([
   "password",
   "passwordHash",
   "confirmPassword",
+  "accessCode",
   "token",
   "secret",
   "apiKey",

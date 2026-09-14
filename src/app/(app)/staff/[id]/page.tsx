@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { ResetPasswordDialog } from "@/app/(app)/staff/staff-dialogs";
+import { RegenerateAccessCodeDialog } from "@/app/(app)/staff/staff-dialogs";
 import {
   PermissionMatrix,
   type PermissionRow,
@@ -118,7 +118,7 @@ export default async function StaffDetailPage({
               </Link>
             </Button>
             {canManage ? (
-              <ResetPasswordDialog userId={staff.id} name={staff.name} />
+              <RegenerateAccessCodeDialog userId={staff.id} name={staff.name} />
             ) : null}
           </>
         }
@@ -129,9 +129,6 @@ export default async function StaffDetailPage({
             <span className="font-mono text-sm text-muted-foreground">
               {staff.employeeCode}
             </span>
-          ) : null}
-          {staff.mustChangePassword ? (
-            <StatusBadge status="PENDING" tone="warning" label="Password change pending" />
           ) : null}
         </div>
       </PageHeader>

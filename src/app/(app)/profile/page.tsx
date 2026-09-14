@@ -1,9 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/shared/page-header";
-import { ChangePasswordForm } from "@/app/(app)/profile/change-password-form";
+import { AccessCodeCard } from "@/app/(app)/profile/access-code-card";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/dates";
 import { ROLE_LABELS, PERMISSION_DESCRIPTIONS } from "@/lib/rbac";
@@ -25,17 +24,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="My profile" description="Your account, access and security." />
-
-      {record?.mustChangePassword ? (
-        <Alert variant="warning">
-          <AlertTitle>Choose your own password</AlertTitle>
-          <AlertDescription>
-            You are still using the temporary password issued to you. Please change it
-            below.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <PageHeader title="My profile" description="Your account and access." />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card>
@@ -73,13 +62,17 @@ export default async function ProfilePage() {
 
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Change password</CardTitle>
+            <CardTitle>Your access code</CardTitle>
             <CardDescription>
-              Pick something you do not use anywhere else.
+              Enter this on the sign-in screen. Keep it to yourself — anyone with it can
+              sign in as you.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ChangePasswordForm />
+            <AccessCodeCard accessCode={record?.accessCode ?? ""} />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Need a new code? Ask a Super Admin to regenerate it from Staff.
+            </p>
           </CardContent>
         </Card>
       </div>

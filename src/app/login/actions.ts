@@ -12,8 +12,11 @@ import { flattenZodError, type ActionResult } from "@/lib/action-result";
 import { ROLE_LANDING_PATH } from "@/lib/rbac";
 
 const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email("Enter a valid email address"),
-  password: z.string().min(1, "Enter your password"),
+  accessCode: z
+    .string()
+    .trim()
+    .min(4, "Enter your access code")
+    .max(12, "That code is too long"),
   callbackUrl: z.string().optional(),
 });
 
@@ -24,55 +27,54 @@ export async function loginAction(
   formData: FormData,
 ): Promise<LoginState> {
   const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
+    accessCode: formData.get("accessCode"),
     callbackUrl: formData.get("callbackUrl") ?? undefined,
   });
 
   if (!parsed.success) {
     return {
       ok: false,
-      error: "Please check the details you entered",
+      error: "Enter a valid access code",
       fieldErrors: flattenZodError(parsed.error),
     };
   }
 
-  const { email, password, callbackUrl } = parsed.data;
+  const { accessCode, callbackUrl } = parsed.data;
 
-  // Throttle by IP and by account, so neither a single client nor a single
-  // target account can be hammered.
+  // Throttle by IP and by the code itself, so neither a single client nor a
+  // single account can be hammered by trial and error.
   const headerList = await headers();
   const ip =
     headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     headerList.get("x-real-ip") ??
     "unknown";
 
-  for (const key of [`login:ip:${ip}`, `login:email:${email}`]) {
+  for (const key of [`login:ip:${ip}`, `login:code:${accessCode}`]) {
     const limit = rateLimit(key, RATE_LIMITS.LOGIN.limit, RATE_LIMITS.LOGIN.windowMs);
     if (!limit.success) {
       return {
         ok: false,
-        error: "Too many sign-in attempts. Please try again in a few minutes.",
+        error: "Too many attempts. Please try again in a few minutes.",
       };
     }
   }
 
   try {
-    await signIn("credentials", { email, password, redirect: false });
+    await signIn("credentials", { accessCode, redirect: false });
   } catch (error) {
     if (error instanceof AuthError) {
       await recordAudit({
         action: "LOGIN_FAILED",
         entity: "User",
-        summary: `Failed sign-in attempt for ${email}`,
+        summary: "Failed sign-in attempt with an invalid access code",
       });
-      return { ok: false, error: "Incorrect email or password" };
+      return { ok: false, error: "That access code was not recognised" };
     }
     throw error;
   }
 
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { accessCode },
     select: { id: true, branchId: true, role: true },
   });
 
@@ -83,13 +85,18 @@ export async function loginAction(
       action: "LOGIN",
       entity: "User",
       entityId: user.id,
-      summary: `${email} signed in`,
+      summary: "Signed in with an access code",
     });
   }
 
+  // Scanner is a dedicated, single-purpose surface: it always opens straight
+  // to the scan workspace, whatever page originally sent someone to sign in.
   const landing = user ? ROLE_LANDING_PATH[user.role] : "/dashboard";
   const target =
-    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+    user?.role !== "SCANNER" &&
+    callbackUrl &&
+    callbackUrl.startsWith("/") &&
+    !callbackUrl.startsWith("//")
       ? callbackUrl
       : landing;
 

@@ -17,13 +17,6 @@ export const createStaffSchema = z.object({
   name: z.string().trim().min(2, "Name is required").max(120),
   email: z.string().trim().toLowerCase().email("Enter a valid email address"),
   phone: optionalPhone,
-  password: z
-    .string()
-    .min(10, "Use at least 10 characters")
-    .max(128)
-    .regex(/[a-z]/, "Include a lowercase letter")
-    .regex(/[A-Z]/, "Include an uppercase letter")
-    .regex(/[0-9]/, "Include a digit"),
   role: userRoleSchema,
   branchId: optionalCuid,
   department: optionalText(80),
@@ -55,15 +48,8 @@ export const updateStaffSchema = z.object({
   addressLine: optionalText(300),
 });
 
-export const resetPasswordSchema = z.object({
+export const regenerateAccessCodeSchema = z.object({
   userId: cuidSchema,
-  password: z
-    .string()
-    .min(10, "Use at least 10 characters")
-    .max(128)
-    .regex(/[a-z]/, "Include a lowercase letter")
-    .regex(/[A-Z]/, "Include an uppercase letter")
-    .regex(/[0-9]/, "Include a digit"),
 });
 
 export const permissionOverrideSchema = z.object({

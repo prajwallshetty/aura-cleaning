@@ -35,6 +35,9 @@ export interface ScannedGarmentCard {
   outstandingAmount: number;
   expectedDeliveryAt: string;
   lastScannedAt: string | null;
+  /** A soft, non-blocking notice — an unusual status or a gap in the scan
+   *  trail — shown inline on an otherwise clean FOUND card. */
+  warning: string | null;
 }
 
 /** What the panel shows when the scanned garment does not belong where expected. */
@@ -99,7 +102,7 @@ function itemsSummary(order: GarmentWithCard["order"]): string {
     .join(", ");
 }
 
-function toCard(garment: GarmentWithCard): ScannedGarmentCard {
+function toCard(garment: GarmentWithCard, warning: string | null = null): ScannedGarmentCard {
   const meta = categoryMeta(garment.trackingCategory);
   return {
     garmentId: garment.id,
@@ -124,7 +127,101 @@ function toCard(garment: GarmentWithCard): ScannedGarmentCard {
     outstandingAmount: num(garment.order.outstandingAmount),
     expectedDeliveryAt: garment.order.expectedDeliveryAt.toISOString(),
     lastScannedAt: garment.lastScannedAt?.toISOString() ?? null,
+    warning,
   };
+}
+
+const DONE_TASK_STATUSES = ["COMPLETED", "PASSED", "SKIPPED"];
+const UNUSUAL_STATUSES = ["REWASH", "REWORK", "QC_FAILED", "DAMAGED", "RETURNED"];
+
+/**
+ * A garment can scan clean and still be worth a second look: it was read
+ * against another order or category earlier and never reconciled, it is
+ * sitting in a status that is not part of the normal flow, or it cleared a
+ * station without a scan ever being recorded there. None of these block the
+ * scan — they surface as a soft notice on the FOUND card, or (for a still-open
+ * wrong-order/wrong-category read) as a full mismatch.
+ */
+async function findPersistedIssue(
+  garment: GarmentWithCard,
+): Promise<{ mismatch: MismatchCard | null; warning: string | null }> {
+  const [scans, tasks] = await Promise.all([
+    prisma.garmentScan.findMany({
+      where: { garmentId: garment.id },
+      orderBy: { scannedAt: "desc" },
+      take: 20,
+      select: {
+        stage: true,
+        outcome: true,
+        contextOrder: { select: { orderNumber: true, customerName: true } },
+      },
+    }),
+    prisma.processingTask.findMany({
+      where: { garmentId: garment.id },
+      select: { stage: true, status: true },
+    }),
+  ]);
+
+  const categoryLabel = categoryMeta(garment.trackingCategory).label;
+  const latestByOutcome = scans.find((scan) => scan.outcome !== "MATCH");
+  if (latestByOutcome && latestByOutcome.outcome === "WRONG_ORDER") {
+    return {
+      mismatch: {
+        garmentId: garment.id,
+        garmentCode: garment.garmentCode,
+        categoryLabel,
+        actualCustomerName: garment.order.customerName,
+        actualOrderId: garment.order.id,
+        actualOrderNumber: garment.order.orderNumber,
+        expectedOrderId: null,
+        expectedOrderNumber: latestByOutcome.contextOrder?.orderNumber ?? null,
+        expectedCustomerName: latestByOutcome.contextOrder?.customerName ?? null,
+        expectedCategoryLabel: categoryLabel,
+        detail: `Last read under ${latestByOutcome.contextOrder?.orderNumber ?? "another order"}; it belongs to ${garment.order.orderNumber}.`,
+      },
+      warning: null,
+    };
+  }
+  if (latestByOutcome && latestByOutcome.outcome === "WRONG_CATEGORY") {
+    return {
+      mismatch: {
+        garmentId: garment.id,
+        garmentCode: garment.garmentCode,
+        categoryLabel,
+        actualCustomerName: garment.order.customerName,
+        actualOrderId: garment.order.id,
+        actualOrderNumber: garment.order.orderNumber,
+        expectedOrderId: garment.order.id,
+        expectedOrderNumber: garment.order.orderNumber,
+        expectedCustomerName: garment.order.customerName,
+        expectedCategoryLabel: categoryLabel,
+        detail: `Last scanned into the wrong category's bucket at ${STAGE_LABELS[latestByOutcome.stage]}.`,
+      },
+      warning: null,
+    };
+  }
+
+  if (UNUSUAL_STATUSES.includes(garment.status)) {
+    return {
+      mismatch: null,
+      warning: `Unexpected status — ${GARMENT_STATUS_LABELS[garment.status]}.`,
+    };
+  }
+
+  const scannedStages = new Set(
+    scans.filter((scan) => scan.outcome === "MATCH").map((scan) => scan.stage),
+  );
+  const skipped = tasks
+    .filter((task) => DONE_TASK_STATUSES.includes(task.status) && !scannedStages.has(task.stage))
+    .map((task) => STAGE_LABELS[task.stage]);
+  if (skipped.length > 0) {
+    return {
+      mismatch: null,
+      warning: `Cleared ${skipped.join(", ")} with no scan on record.`,
+    };
+  }
+
+  return { mismatch: null, warning: null };
 }
 
 /**
@@ -277,6 +374,21 @@ export async function resolveGarmentScan(params: {
     };
   }
 
+  // No context was given, but the garment's own history may already flag a
+  // problem — an unreconciled wrong-order/wrong-category read, an unusual
+  // status, or a gap in the scan trail.
+  const persisted = await findPersistedIssue(garment);
+  if (persisted.mismatch) {
+    return {
+      ok: false,
+      kind: "MISMATCH",
+      message: persisted.mismatch.detail,
+      garment: null,
+      mismatch: persisted.mismatch,
+      secondsAgo: null,
+    };
+  }
+
   // A clean match — write it to the ledger and stamp the garment right away,
   // so the next scan of the same tag falls into the duplicate window above.
   await recordGarmentScan(prisma, {
@@ -296,7 +408,7 @@ export async function resolveGarmentScan(params: {
     ok: true,
     kind: "FOUND",
     message: `${garment.garmentCode} — ${garment.order.customerName} (${garment.order.orderNumber})`,
-    garment: toCard(garment),
+    garment: toCard(garment, persisted.warning),
     mismatch: null,
     secondsAgo: null,
   };

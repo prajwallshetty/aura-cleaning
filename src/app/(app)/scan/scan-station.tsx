@@ -6,13 +6,14 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  Check,
   CheckCircle2,
   ExternalLink,
   History,
   Printer,
   ScanLine,
   Search,
-  Tag,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
@@ -52,9 +53,15 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
   const [contextInput, setContextInput] = useState("");
   const [manualQuery, setManualQuery] = useState("");
   const [history, setHistory] = useState(initialHistory);
+  const [clearedAt, setClearedAt] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
   const [statusPending, startStatusTransition] = useTransition();
   const resultRef = useRef<HTMLDivElement>(null);
+  const manualInputRef = useRef<HTMLInputElement>(null);
+
+  const visibleHistory = clearedAt
+    ? history.filter((row) => new Date(row.scannedAt).getTime() > clearedAt)
+    : history;
 
   const refreshHistory = useCallback(() => {
     startTransition(async () => {
@@ -117,27 +124,43 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
     });
   }, [contextInput, refreshHistory]);
 
+  const status =
+    result === null
+      ? "Ready to scan"
+      : result.kind === "FOUND"
+        ? "Garment found"
+        : result.kind === "DUPLICATE"
+          ? "Already scanned"
+          : result.kind === "MISMATCH"
+            ? "Mismatch detected"
+            : "Tag not found";
+
   return (
     <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <div className="min-w-0 space-y-4">
         <Card className="border-primary/30">
           <CardHeader className="flex-row items-center justify-between gap-2 pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <ScanLine className="size-5 text-primary" /> Scanner
+              <ScanLine className="size-5 text-primary" /> Scan Garment
             </CardTitle>
-            {context ? (
-              <Badge tone="info" className="gap-1.5">
-                Working on {context.orderNumber} · {context.customerName}
-                <button
-                  type="button"
-                  onClick={() => setContext(null)}
-                  aria-label="Clear order context"
-                  className="ml-1 rounded-full hover:bg-black/10"
-                >
-                  <X className="size-3" />
-                </button>
+            <div className="flex items-center gap-2">
+              {context ? (
+                <Badge tone="info" className="gap-1.5">
+                  Working on {context.orderNumber} · {context.customerName}
+                  <button
+                    type="button"
+                    onClick={() => setContext(null)}
+                    aria-label="Clear order context"
+                    className="ml-1 rounded-full hover:bg-black/10"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ) : null}
+              <Badge tone="neutral" className="whitespace-nowrap">
+                {status}
               </Badge>
-            ) : null}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div
@@ -147,7 +170,8 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
               )}
             >
               <Scanner
-                onScan={(code) => runScan(code, "KEYBOARD")}
+                variant="workstation"
+                onScan={(code, source) => runScan(code, source === "camera" ? "CAMERA" : "KEYBOARD")}
                 placeholder="Scan a garment tag, or type its code (TR-1042)…"
                 debounceMs={600}
               />
@@ -188,6 +212,7 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
               canResolve={canResolve}
               pending={pending || statusPending}
               onScanNext={scanNext}
+              onSearchManually={() => manualInputRef.current?.focus()}
               onUpdateStatus={(garmentId) =>
                 startStatusTransition(async () => {
                   const res = await scanUpdateStatusAction({ garmentId });
@@ -208,12 +233,10 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
             />
           ) : (
             <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-                <ScanLine className="size-10 text-muted-foreground/50" />
-                <p className="font-medium">Ready to scan</p>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Point the scanner at a garment tag. The garment, its owner,
-                  order and status all appear here the instant it reads.
+              <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
+                <ScanLine className="size-8 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">
+                  Scan → see the owner → verify → update → next.
                 </p>
               </CardContent>
             </Card>
@@ -223,7 +246,7 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <Search className="size-3.5" /> Manual search
+              <Search className="size-3.5" /> Enter Garment ID / Order ID
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -238,25 +261,26 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
               }}
             >
               <Input
+                ref={manualInputRef}
                 value={manualQuery}
                 onChange={(event) => setManualQuery(event.target.value)}
-                placeholder="Garment ID or Order ID…"
+                placeholder="TR-1042"
                 className="h-9"
               />
               <Button type="submit" size="sm" variant="outline" disabled={pending}>
-                Search
+                Find Garment
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        {history.length > 0 ? (
+        {visibleHistory.length > 0 ? (
           <div>
             <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              <History className="size-3.5" /> Recent scans
+              <History className="size-3.5" /> Recent Scans
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {history.slice(0, 20).map((row) => (
+              {visibleHistory.slice(0, 20).map((row) => (
                 <button
                   key={row.id}
                   type="button"
@@ -272,8 +296,10 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
                   )}
                   title={row.message ?? undefined}
                 >
-                  {row.garmentCode ?? row.orderNumber ?? row.rawCode}
-                  <span aria-hidden>{row.succeeded ? "✓" : "⚠️"}</span>
+                  {row.succeeded ? "🟢" : "🔴"} {row.garmentCode ?? row.orderNumber ?? row.rawCode}
+                  {row.customerName ? (
+                    <span className="text-muted-foreground">— {row.customerName}</span>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -282,19 +308,29 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
       </div>
 
       <Card className="h-fit min-w-0">
-        <CardHeader className="pb-3">
+        <CardHeader className="flex-row items-center justify-between gap-2 pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <History className="size-4" /> Scan log
           </CardTitle>
+          {visibleHistory.length > 0 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground"
+              onClick={() => setClearedAt(Date.now())}
+            >
+              <Trash2 /> Clear history
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-1.5">
-          {history.length === 0 ? (
+          {visibleHistory.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               Nothing scanned yet.
             </p>
           ) : (
             <ol className="max-h-[600px] space-y-1 overflow-y-auto pr-1">
-              {history.map((row) => (
+              {visibleHistory.map((row) => (
                 <li key={row.id}>
                   <ScanHistoryItem
                     row={row}
@@ -310,12 +346,57 @@ export function ScanStation({ history: initialHistory, canUpdateStatus, canResol
   );
 }
 
+const PIPELINE: { token: string; label: string }[] = [
+  { token: "WASH", label: "Washing" },
+  { token: "DRI", label: "Drying" },
+  { token: "IRON", label: "Ironing" },
+  { token: "PACK", label: "Packing" },
+  { token: "READY", label: "Ready" },
+  { token: "DELIVERED", label: "Delivered" },
+];
+
+function pipelineIndex(status: string): number {
+  const index = PIPELINE.findIndex((step) => status.startsWith(step.token));
+  return index === -1 ? 0 : index;
+}
+
+function StageStepper({ status }: { status: string }) {
+  const current = pipelineIndex(status);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {PIPELINE.map((step, index) => {
+        const done = index < current;
+        const active = index === current;
+        return (
+          <div key={step.token} className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition",
+                done && "bg-success/15 text-success",
+                active && "bg-primary text-primary-foreground",
+                !done && !active && "bg-muted text-muted-foreground",
+              )}
+            >
+              {done ? <Check className="size-3" /> : null}
+              {step.label}
+            </span>
+            {index < PIPELINE.length - 1 ? (
+              <ArrowRight className="size-3 text-muted-foreground/50" />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ResultPanel({
   result,
   canUpdateStatus,
   canResolve,
   pending,
   onScanNext,
+  onSearchManually,
   onUpdateStatus,
 }: {
   result: ScanResult;
@@ -323,6 +404,7 @@ function ResultPanel({
   canResolve: boolean;
   pending: boolean;
   onScanNext: () => void;
+  onSearchManually: () => void;
   onUpdateStatus: (garmentId: string) => void;
 }) {
   if (result.kind === "MISMATCH" && result.mismatch) {
@@ -338,7 +420,7 @@ function ResultPanel({
               <AlertTriangle className="size-5" />
             </span>
             <div>
-              <p className="text-base font-semibold">⚠️ Tag not found</p>
+              <p className="text-base font-semibold">⚠️ QR code not recognized</p>
               <p className="text-sm text-muted-foreground">{result.message}</p>
             </div>
           </div>
@@ -346,15 +428,8 @@ function ResultPanel({
             <Button size="sm" onClick={onScanNext}>
               <ScanLine /> Scan again
             </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/search">
-                <Search /> Search manually
-              </Link>
-            </Button>
-            <Button size="sm" variant="outline" asChild>
-              <Link href="/orders">
-                <Tag /> Create / assign tag
-              </Link>
+            <Button size="sm" variant="outline" onClick={onSearchManually}>
+              <Search /> Search manually
             </Button>
           </div>
         </CardContent>
@@ -383,7 +458,11 @@ function ResultPanel({
             </p>
             {isDuplicate ? (
               <p className="text-sm text-muted-foreground">{result.message}</p>
-            ) : null}
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                This garment belongs to <span className="font-medium text-foreground">{garment.customerName}</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -396,6 +475,16 @@ function ResultPanel({
           </Badge>
           <StatusBadge status={garment.status} label={garment.statusLabel} dot />
         </div>
+
+        {garment.warning ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-sm"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
+            <span>{garment.warning}</span>
+          </div>
+        ) : null}
 
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Fact label="Customer">
@@ -426,20 +515,29 @@ function ResultPanel({
           <Fact label="Delivery date">{formatDate(garment.expectedDeliveryAt)}</Fact>
         </dl>
 
+        {!isDuplicate ? (
+          <div className="border-t border-border pt-3">
+            <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Laundry status
+            </p>
+            <StageStepper status={garment.status} />
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-          <Button size="sm" variant="outline" asChild>
-            <Link href={`/orders/${garment.orderId}`}>
-              <ExternalLink /> View order
-            </Link>
-          </Button>
           {canUpdateStatus && !isDuplicate ? (
             <Button size="sm" disabled={pending} onClick={() => onUpdateStatus(garment.garmentId)}>
               <ArrowRight /> Update status
             </Button>
           ) : null}
           <Button size="sm" variant="outline" asChild>
+            <Link href={`/orders/${garment.orderId}`}>
+              <ExternalLink /> View order
+            </Link>
+          </Button>
+          <Button size="sm" variant="outline" asChild>
             <Link href={`/orders/${garment.orderId}/tags`}>
-              <Printer /> Print tag
+              <Printer /> {garment.lastScannedAt ? "Reprint tag" : "Print tag"}
             </Link>
           </Button>
           <Button size="sm" onClick={onScanNext}>

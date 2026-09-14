@@ -2,12 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
 import { recordAudit } from "@/lib/audit";
 import { PERMISSIONS, ROLE_LABELS, isGlobalRole } from "@/lib/rbac";
 import { cuidSchema } from "@/lib/validations/common";
+import { generateUniqueAccessCode } from "@/lib/access-code";
 import {
   assertBranchAccess,
   authorize,
@@ -27,11 +27,9 @@ import {
   leaveDecisionSchema,
   leaveSchema,
   permissionOverrideSchema,
-  resetPasswordSchema,
+  regenerateAccessCodeSchema,
   updateStaffSchema,
 } from "@/lib/validations/staff";
-
-const BCRYPT_ROUNDS = 12;
 
 /** Only a super admin may mint another super admin. */
 function assertCanAssignRole(actorRole: string, targetRole: string) {
@@ -45,7 +43,7 @@ function assertCanAssignRole(actorRole: string, targetRole: string) {
 
 export async function createStaffAction(
   payload: unknown,
-): Promise<ActionResult<{ id: string; employeeCode: string }>> {
+): Promise<ActionResult<{ id: string; employeeCode: string; accessCode: string }>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.STAFF_MANAGE);
     const input = createStaffSchema.parse(payload);
@@ -61,6 +59,8 @@ export async function createStaffAction(
     });
     if (existing) throw new BusinessRuleError("That email address is already registered");
 
+    const accessCode = await generateUniqueAccessCode();
+
     const created = await prisma.$transaction(async (tx) => {
       const employeeCode = await nextEmployeeCode(tx);
 
@@ -70,10 +70,9 @@ export async function createStaffAction(
           name: input.name,
           email: input.email,
           phone: input.phone ?? null,
-          passwordHash: await bcrypt.hash(input.password, BCRYPT_ROUNDS),
+          accessCode,
           role: input.role,
           branchId,
-          mustChangePassword: true,
           staffProfile: {
             create: {
               department: input.department ?? null,
@@ -114,7 +113,7 @@ export async function createStaffAction(
     });
 
     revalidatePath("/staff");
-    return { id: created.id, employeeCode: created.employeeCode ?? "" };
+    return { id: created.id, employeeCode: created.employeeCode ?? "", accessCode };
   });
 }
 
@@ -193,10 +192,12 @@ export async function updateStaffAction(payload: unknown): Promise<ActionResult<
   });
 }
 
-export async function resetPasswordAction(payload: unknown): Promise<ActionResult<null>> {
+export async function regenerateAccessCodeAction(
+  payload: unknown,
+): Promise<ActionResult<{ accessCode: string }>> {
   return runAction(async () => {
     const user = await authorize(PERMISSIONS.STAFF_MANAGE);
-    const input = resetPasswordSchema.parse(payload);
+    const input = regenerateAccessCodeSchema.parse(payload);
 
     const staff = await prisma.user.findUnique({
       where: { id: input.userId },
@@ -206,26 +207,25 @@ export async function resetPasswordAction(payload: unknown): Promise<ActionResul
     assertBranchAccess(user, staff.branchId);
     assertCanAssignRole(user.role, staff.role);
 
+    const accessCode = await generateUniqueAccessCode();
+
     await prisma.user.update({
       where: { id: staff.id },
-      data: {
-        passwordHash: await bcrypt.hash(input.password, BCRYPT_ROUNDS),
-        mustChangePassword: true,
-      },
+      data: { accessCode },
     });
 
-    // The new password itself is never written to the audit trail.
+    // The new code itself is never written to the audit trail.
     await recordAudit({
       userId: user.id,
       branchId: staff.branchId,
-      action: "STAFF_PASSWORD_RESET",
+      action: "STAFF_ACCESS_CODE_RESET",
       entity: "User",
       entityId: staff.id,
-      summary: `Password reset for ${staff.name}`,
+      summary: `Access code regenerated for ${staff.name}`,
     });
 
     revalidatePath(`/staff/${staff.id}`);
-    return null;
+    return { accessCode };
   });
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, UserPlus } from "lucide-react";
+import { Copy, KeyRound, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -29,22 +29,35 @@ import {
   createStaffAction,
   decideLeaveAction,
   markAttendanceAction,
-  resetPasswordAction,
+  regenerateAccessCodeAction,
 } from "@/app/(app)/staff/actions";
 import type { FieldErrors } from "@/lib/action-result";
 
 const ROLES = Object.keys(ROLE_LABELS) as (keyof typeof ROLE_LABELS)[];
 
-/** Suggests a password that satisfies the policy, so managers don't invent weak ones. */
-function suggestPassword() {
-  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const lower = "abcdefghijkmnpqrstuvwxyz";
-  const digits = "23456789";
-  const all = upper + lower + digits;
-  const pick = (set: string) => set[Math.floor(Math.random() * set.length)];
-  const chars = [pick(upper), pick(lower), pick(digits)];
-  for (let i = 0; i < 9; i += 1) chars.push(pick(all));
-  return chars.sort(() => Math.random() - 0.5).join("");
+function copyCode(code: string) {
+  navigator.clipboard
+    .writeText(code)
+    .then(() => toast.success("Access code copied"))
+    .catch(() => toast.error("Could not copy — copy it manually"));
+}
+
+/** A copyable access-code readout shown right after it is issued. */
+function AccessCodeReveal({ code }: { code: string }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2.5">
+      <span className="flex-1 font-mono text-lg font-semibold tracking-[0.3em]">{code}</span>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label="Copy access code"
+        onClick={() => copyCode(code)}
+      >
+        <Copy />
+      </Button>
+    </div>
+  );
 }
 
 export function NewStaffDialog({
@@ -63,12 +76,12 @@ export function NewStaffDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [issuedCode, setIssuedCode] = useState<{ name: string; code: string } | null>(null);
 
   const [form, setForm] = useState({
     name: "",
     email: "",
     phone: "",
-    password: suggestPassword(),
     role: "SCANNER",
     branchId: defaultBranchId ?? branches[0]?.value ?? "",
     department: "",
@@ -80,17 +93,38 @@ export function NewStaffDialog({
   const set = (patch: Partial<typeof form>) => setForm((current) => ({ ...current, ...patch }));
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setIssuedCode(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <UserPlus /> Add staff
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
+        {issuedCode ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>{issuedCode.name} is ready to sign in</DialogTitle>
+              <DialogDescription>
+                Share this access code with them securely — it is their only credential.
+              </DialogDescription>
+            </DialogHeader>
+            <AccessCodeReveal code={issuedCode.code} />
+            <DialogFooter>
+              <Button onClick={() => setOpen(false)}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
         <DialogHeader>
           <DialogTitle>Add a staff member</DialogTitle>
           <DialogDescription>
-            They will be asked to change this password the first time they sign in.
+            A unique access code is generated automatically once you create the account.
           </DialogDescription>
         </DialogHeader>
 
@@ -109,29 +143,6 @@ export function NewStaffDialog({
           </FormField>
           <FormField label="Phone" error={fieldErrors.phone}>
             <Input value={form.phone} onChange={(e) => set({ phone: e.target.value })} />
-          </FormField>
-          <FormField
-            label="Temporary password"
-            required
-            error={fieldErrors.password}
-            hint="At least 10 characters with upper, lower and a digit"
-          >
-            <div className="flex gap-1.5">
-              <Input
-                value={form.password}
-                onChange={(e) => set({ password: e.target.value })}
-                className="font-mono"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Generate password"
-                onClick={() => set({ password: suggestPassword() })}
-              >
-                <KeyRound />
-              </Button>
-            </div>
           </FormField>
 
           <FormField label="Role" required>
@@ -218,8 +229,8 @@ export function NewStaffDialog({
                 });
                 if (result.ok) {
                   toast.success(`${form.name} added as ${result.data.employeeCode}`);
-                  setOpen(false);
-                  setForm({ ...form, name: "", email: "", phone: "", password: suggestPassword() });
+                  setIssuedCode({ name: form.name, code: result.data.accessCode });
+                  setForm({ ...form, name: "", email: "", phone: "" });
                   router.refresh();
                 } else {
                   setError(result.error);
@@ -231,12 +242,14 @@ export function NewStaffDialog({
             Create account
           </Button>
         </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-export function ResetPasswordDialog({
+export function RegenerateAccessCodeDialog({
   userId,
   name,
 }: {
@@ -245,64 +258,60 @@ export function ResetPasswordDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const [password, setPassword] = useState(suggestPassword());
+  const [newCode, setNewCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setNewCode(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          <KeyRound /> Reset password
+          <KeyRound /> Regenerate access code
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reset password for {name}</DialogTitle>
+          <DialogTitle>
+            {newCode ? `New access code for ${name}` : `Regenerate access code for ${name}`}
+          </DialogTitle>
           <DialogDescription>
-            Share this password securely — they must change it at next sign-in.
+            {newCode
+              ? "Their old code stops working immediately. Share this one securely."
+              : "This immediately invalidates their current access code."}
           </DialogDescription>
         </DialogHeader>
         {error ? <FormError message={error} /> : null}
-        <FormField label="New password" required>
-          <div className="flex gap-1.5">
-            <Input
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="font-mono"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="Generate password"
-              onClick={() => setPassword(suggestPassword())}
-            >
-              <KeyRound />
+        {newCode ? (
+          <AccessCodeReveal code={newCode} />
+        ) : (
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
             </Button>
-          </div>
-        </FormField>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            loading={isPending}
-            onClick={() =>
-              startTransition(async () => {
-                setError(null);
-                const result = await resetPasswordAction({ userId, password });
-                if (result.ok) {
-                  toast.success("Password reset");
-                  setOpen(false);
-                } else {
-                  setError(result.error);
-                }
-              })
-            }
-          >
-            Reset
-          </Button>
-        </DialogFooter>
+            <Button
+              loading={isPending}
+              onClick={() =>
+                startTransition(async () => {
+                  setError(null);
+                  const result = await regenerateAccessCodeAction({ userId });
+                  if (result.ok) {
+                    toast.success("Access code regenerated");
+                    setNewCode(result.data.accessCode);
+                  } else {
+                    setError(result.error);
+                  }
+                })
+              }
+            >
+              Regenerate
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -10,7 +10,6 @@
  * Safe to re-run: it clears the transactional tables first.
  */
 import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import type {
@@ -28,9 +27,6 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is not set");
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-
-const BCRYPT_ROUNDS = 10;
-const DEMO_PASSWORD = "Aura@Laundry1";
 
 // ---------------------------------------------------------------------------
 // Deterministic pseudo-randomness, so repeated seeds produce comparable data.
@@ -281,12 +277,11 @@ async function seedUsers(branches: {
   branch2: { id: string };
   cpu: { id: string };
 }) {
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_ROUNDS);
-
   const definitions: {
     employeeCode: string;
     name: string;
     email: string;
+    accessCode: string;
     role: UserRole;
     branchId: string | null;
     department?: string;
@@ -297,6 +292,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0001",
       name: "Ravi Anand",
       email: "superadmin@auralaundry.example",
+      accessCode: "100001",
       role: "SUPER_ADMIN",
       branchId: branches.headOffice.id,
       department: "Technology",
@@ -306,6 +302,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0002",
       name: "Sunita Rao",
       email: "manager@auralaundry.example",
+      accessCode: "200001",
       role: "MANAGER",
       branchId: branches.headOffice.id,
       department: "Leadership",
@@ -315,6 +312,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0003",
       name: "Deepak Menon",
       email: "manager2@auralaundry.example",
+      accessCode: "200002",
       role: "MANAGER",
       branchId: branches.branch1.id,
       department: "Operations",
@@ -324,6 +322,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0004",
       name: "Rekha Pillai",
       email: "manager3@auralaundry.example",
+      accessCode: "200003",
       role: "MANAGER",
       branchId: branches.branch2.id,
       department: "Operations",
@@ -333,6 +332,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0013",
       name: "Nandini Bhat",
       email: "accountant@auralaundry.example",
+      accessCode: "200004",
       role: "MANAGER",
       branchId: branches.headOffice.id,
       department: "Finance",
@@ -342,6 +342,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0005",
       name: "Anjali Verma",
       email: "counter@auralaundry.example",
+      accessCode: "300001",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Front Desk",
@@ -351,6 +352,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0006",
       name: "Suresh Kumar",
       email: "counter2@auralaundry.example",
+      accessCode: "300002",
       role: "SCANNER",
       branchId: branches.branch2.id,
       department: "Front Desk",
@@ -360,6 +362,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0007",
       name: "Mahesh Gowda",
       email: "washing@auralaundry.example",
+      accessCode: "300003",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
@@ -369,6 +372,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0008",
       name: "Lalita Devi",
       email: "ironing@auralaundry.example",
+      accessCode: "300004",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
@@ -378,6 +382,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0009",
       name: "Fatima Sheikh",
       email: "qc@auralaundry.example",
+      accessCode: "300005",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Quality",
@@ -387,6 +392,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0010",
       name: "Joseph Dsouza",
       email: "packing@auralaundry.example",
+      accessCode: "300006",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Production",
@@ -396,6 +402,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0011",
       name: "Ganesh Naik",
       email: "driver@auralaundry.example",
+      accessCode: "300007",
       role: "SCANNER",
       branchId: branches.branch1.id,
       department: "Logistics",
@@ -410,6 +417,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0012",
       name: "Prakash Shetty",
       email: "driver2@auralaundry.example",
+      accessCode: "300008",
       role: "SCANNER",
       branchId: branches.branch2.id,
       department: "Logistics",
@@ -424,6 +432,7 @@ async function seedUsers(branches: {
       employeeCode: "EMP0014",
       name: "Imtiaz Ali",
       email: "cpu@auralaundry.example",
+      accessCode: "300009",
       role: "SCANNER",
       branchId: branches.cpu.id,
       department: "Production",
@@ -441,7 +450,7 @@ async function seedUsers(branches: {
         name: definition.name,
         email: definition.email,
         phone: phone(),
-        passwordHash,
+        accessCode: definition.accessCode,
         role: definition.role,
         branchId: definition.branchId,
         staffProfile: {
@@ -454,7 +463,11 @@ async function seedUsers(branches: {
         },
         ...(definition.driver ? { driver: { create: definition.driver } } : {}),
       },
-      update: { passwordHash, role: definition.role, branchId: definition.branchId },
+      update: {
+        accessCode: definition.accessCode,
+        role: definition.role,
+        branchId: definition.branchId,
+      },
       select: { id: true, name: true, email: true, role: true, branchId: true, employeeCode: true },
     });
     users.push(user);
@@ -467,7 +480,7 @@ async function seedUsers(branches: {
     update: { value: definitions.length },
   });
 
-  console.log(`  ${users.length} staff accounts (password: ${DEMO_PASSWORD})`);
+  console.log(`  ${users.length} staff accounts, each with its own access code`);
   return users;
 }
 
@@ -2147,18 +2160,21 @@ async function main() {
   console.log("Expenses & attendance…");
   await seedExpensesAndAttendance(branchList, users);
 
-  console.log("\nDone. Sign in with any of these — password: " + DEMO_PASSWORD);
-  console.log("  superadmin@auralaundry.example   Super Admin");
-  console.log("  manager@auralaundry.example      Manager");
-  console.log("  manager2@auralaundry.example     Manager (Branch 1)");
-  console.log("  manager3@auralaundry.example     Manager (Branch 2)");
-  console.log("  accountant@auralaundry.example   Manager (Finance)");
-  console.log("  counter@auralaundry.example      Scanner");
-  console.log("  washing@auralaundry.example      Scanner");
-  console.log("  ironing@auralaundry.example      Scanner");
-  console.log("  qc@auralaundry.example           Scanner");
-  console.log("  packing@auralaundry.example      Scanner");
-  console.log("  driver@auralaundry.example       Scanner");
+  console.log("\nDone. Sign in on the access-code screen with any of these:");
+  console.log("  100001   Super Admin   (Ravi Anand)");
+  console.log("  200001   Manager       (Sunita Rao — Head Office)");
+  console.log("  200002   Manager       (Deepak Menon — Branch 1)");
+  console.log("  200003   Manager       (Rekha Pillai — Branch 2)");
+  console.log("  200004   Manager       (Nandini Bhat — Finance)");
+  console.log("  300001   Scanner       (Anjali Verma — Branch 1 counter)");
+  console.log("  300002   Scanner       (Suresh Kumar — Branch 2 counter)");
+  console.log("  300003   Scanner       (Mahesh Gowda — Washing)");
+  console.log("  300004   Scanner       (Lalita Devi — Ironing)");
+  console.log("  300005   Scanner       (Fatima Sheikh — QC)");
+  console.log("  300006   Scanner       (Joseph Dsouza — Packing)");
+  console.log("  300007   Scanner       (Ganesh Naik — Delivery)");
+  console.log("  300008   Scanner       (Prakash Shetty — Delivery)");
+  console.log("  300009   Scanner       (Imtiaz Ali — CPU)");
 }
 
 main()

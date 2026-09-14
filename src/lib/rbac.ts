@@ -255,7 +255,7 @@ export function defaultPermissionsFor(role: UserRole): PermissionCode[] {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   SUPER_ADMIN: "Super Admin",
-  MANAGER: "Manager",
+  MANAGER: "Office Manager",
   SCANNER: "Scanner",
 };
 

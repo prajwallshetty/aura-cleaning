@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 
 import { authConfig } from "@/auth.config";
@@ -10,8 +9,7 @@ import type { PermissionCode } from "@/lib/rbac";
 import type { UserRole } from "@/generated/prisma/enums";
 
 const credentialsSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
+  accessCode: z.string().trim().min(1),
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -20,29 +18,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       name: "credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        accessCode: { label: "Access code", type: "text" },
       },
       async authorize(raw) {
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
 
-        const { email, password } = parsed.data;
-
         const user = await prisma.user.findUnique({
-          where: { email: email.toLowerCase().trim() },
+          where: { accessCode: parsed.data.accessCode },
           include: { branch: { select: { id: true, name: true, code: true } } },
         });
 
-        // Constant-ish work whether or not the user exists, so that response
-        // timing does not reveal which accounts are registered.
-        const hash =
-          user?.passwordHash ??
-          "$2b$12$zzzzzzzzzzzzzzzzzzzzzuqPZ4Q6h9sMDHuXvFqPqjHkYQ4H3XhO2";
-        const valid = await bcrypt.compare(password, hash);
-
-        if (!user || !valid) return null;
-        if (user.status !== "ACTIVE") return null;
+        if (!user || user.status !== "ACTIVE") return null;
 
         const permissions = await resolvePermissions(user.id, user.role);
 

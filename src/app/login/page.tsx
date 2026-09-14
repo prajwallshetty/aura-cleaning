@@ -1,44 +1,31 @@
 import { Suspense } from "react";
 import { Shirt } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoginForm } from "@/app/login/login-form";
 
-export const metadata = { title: "Sign in" };
+export const metadata = { title: "Enter access code" };
 
 export default function LoginPage() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-muted/40 px-4 py-10">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-2 text-center">
-          <span className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <Shirt className="size-5" aria-hidden />
+      <div className="w-full max-w-sm space-y-8">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <span className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <Shirt className="size-7" aria-hidden />
           </span>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Aura Laundry ERP</h1>
-            <p className="text-sm text-muted-foreground">
-              Order → Garment → Processing → Location → Delivery
-            </p>
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">Laundry Management</h1>
+            <p className="text-sm text-muted-foreground">Enter your access code</p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign in</CardTitle>
-            <CardDescription>
-              Use the credentials issued by your branch manager.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<Skeleton className="h-56 w-full" />}>
-              <LoginForm />
-            </Suspense>
-          </CardContent>
-        </Card>
+        <Suspense fallback={<Skeleton className="h-40 w-full rounded-2xl" />}>
+          <LoginForm />
+        </Suspense>
 
         <p className="text-center text-xs text-muted-foreground">
-          Protected by role-based access control. All activity is audited.
+          Lost your code? Ask a Super Admin to look it up in Staff.
         </p>
       </div>
     </div>
