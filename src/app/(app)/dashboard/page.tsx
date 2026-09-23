@@ -43,6 +43,7 @@ import {
   servicePerformance,
   stagePipeline,
 } from "@/lib/services/analytics";
+import { detectMismatches } from "@/lib/services/garment-tracking";
 import { PERMISSIONS } from "@/lib/rbac";
 import { hasPermission, requirePermission } from "@/lib/session";
 import { ORDER_STATUS_LABELS } from "@/lib/workflow";
@@ -97,6 +98,7 @@ export default async function DashboardPage({
     serviceOptions,
     recentOrders,
     branchStats,
+    mismatchFindings,
   ] = await Promise.all([
     dashboardMetrics(filters),
     revenueSeries(filters),
@@ -128,7 +130,10 @@ export default async function DashboardPage({
       },
     }),
     canSeeAllBranches ? branchPerformance(range) : Promise.resolve([]),
+    detectMismatches({ branchIds: branchId ? [branchId] : null }),
   ]);
+
+  const mismatchCount = mismatchFindings.length;
 
   const now = new Date();
 
@@ -255,6 +260,13 @@ export default async function DashboardPage({
           icon={MessageSquareWarning}
           tone={metrics.openComplaints > 0 ? "warning" : "default"}
           href="/complaints?status=OPEN"
+        />
+        <StatCard
+          label="Mismatches"
+          value={mismatchCount}
+          icon={AlertTriangle}
+          tone={mismatchCount > 0 ? "danger" : "default"}
+          href="/mismatch"
         />
       </section>
 
