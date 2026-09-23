@@ -345,6 +345,31 @@ export async function resolveGarmentScan(params: {
     };
   }
 
+  // The garment's order was cancelled or refunded — this tag is no longer
+  // live and scanning it into the normal workflow would be silently wrong.
+  if (garment.order.status === "CANCELLED" || garment.order.status === "REFUNDED") {
+    return {
+      ok: false,
+      kind: "MISMATCH",
+      message: `${garment.garmentCode}'s order (${garment.order.orderNumber}) was ${garment.order.status.toLowerCase()} — this tag is inactive.`,
+      garment: null,
+      mismatch: {
+        garmentId: garment.id,
+        garmentCode: garment.garmentCode,
+        categoryLabel: categoryMeta(garment.trackingCategory).label,
+        actualCustomerName: garment.order.customerName,
+        actualOrderId: garment.order.id,
+        actualOrderNumber: garment.order.orderNumber,
+        expectedOrderId: null,
+        expectedOrderNumber: null,
+        expectedCustomerName: null,
+        expectedCategoryLabel: null,
+        detail: `${garment.order.orderNumber} is ${garment.order.status.toLowerCase()}. Confirm with an office manager before doing anything with this garment.`,
+      },
+      secondsAgo: null,
+    };
+  }
+
   // A garment already reported missing is still found — but that is news, not
   // a routine match.
   const openMissing = await prisma.garmentException.findFirst({

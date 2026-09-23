@@ -47,6 +47,8 @@ export function Scanner({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<{ id: string; label: string }[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastScanRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
   const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
@@ -79,7 +81,7 @@ export function Scanner({
   );
 
   // Camera lifecycle. html5-qrcode touches the DOM directly, so it is loaded
-  // lazily and always torn down when the mode changes or the view unmounts.
+  // lazily and always torn down when the mode, or the chosen camera, changes.
   useEffect(() => {
     if (mode !== "camera") return;
 
@@ -92,6 +94,30 @@ export function Scanner({
         const { Html5Qrcode } = await import("html5-qrcode");
         if (cancelled) return;
 
+        // Enumerate available cameras once per session so a device with more
+        // than one (front + back, or several on a tablet) can switch between
+        // them. This call itself triggers the browser's permission prompt on
+        // first use.
+        let target: string | { facingMode: string } = { facingMode: "environment" };
+        if (!activeCameraId) {
+          try {
+            const devices = await Html5Qrcode.getCameras();
+            if (!cancelled && devices.length > 0) {
+              setCameras(devices);
+              const rear = devices.find((d) => /back|rear|environment/i.test(d.label));
+              const chosen = (rear ?? devices[devices.length - 1]).id;
+              setActiveCameraId(chosen);
+              target = chosen;
+            }
+          } catch {
+            // Enumeration can fail even when a plain getUserMedia stream
+            // would succeed (e.g. before permission is granted on some
+            // browsers) — fall back to the generic rear-camera request.
+          }
+        } else {
+          target = activeCameraId;
+        }
+
         const instance = new Html5Qrcode(regionId, { verbose: false });
         scannerRef.current = {
           stop: () => instance.stop(),
@@ -99,7 +125,7 @@ export function Scanner({
         };
 
         await instance.start(
-          { facingMode: "environment" },
+          target,
           { fps: 12, qrbox: { width: 240, height: 240 } },
           (decoded) => {
             void submit(decoded);
@@ -112,10 +138,14 @@ export function Scanner({
       } catch (error) {
         if (!cancelled) {
           setCameraStarting(false);
+          const message =
+            error instanceof Error ? error.message : String(error);
           setCameraError(
-            error instanceof Error
-              ? error.message
-              : "Unable to start the camera. Check browser permissions.",
+            /permission|notallowed/i.test(message)
+              ? "Camera access was denied. Allow camera permission in your browser and try again."
+              : /notfound|no camera/i.test(message)
+                ? "No camera was found on this device."
+                : "Unable to start the camera. Check browser permissions.",
           );
           setMode("keyboard");
         }
@@ -135,7 +165,7 @@ export function Scanner({
           });
       }
     };
-  }, [mode, regionId, submit]);
+  }, [mode, activeCameraId, regionId, submit]);
 
   const keyboardInput = (
     <div className="flex gap-2">
@@ -208,15 +238,30 @@ export function Scanner({
                   <p className="text-sm">Starting camera…</p>
                 </div>
               )}
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="absolute bottom-3 left-1/2 -translate-x-1/2"
-                onClick={() => setMode("keyboard")}
-              >
-                <CameraOff /> Stop Scanner
-              </Button>
+              <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setMode("keyboard")}
+                >
+                  <CameraOff /> Stop Scanner
+                </Button>
+                {cameras.length > 1 ? (
+                  <select
+                    aria-label="Choose camera"
+                    className="h-8 rounded-md border border-border bg-secondary px-2 text-xs font-medium text-secondary-foreground"
+                    value={activeCameraId ?? ""}
+                    onChange={(event) => setActiveCameraId(event.target.value)}
+                  >
+                    {cameras.map((camera) => (
+                      <option key={camera.id} value={camera.id}>
+                        {camera.label || `Camera ${camera.id.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
             </>
           ) : (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
