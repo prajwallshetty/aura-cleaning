@@ -733,6 +733,7 @@ export function GeneralSettingsForm({
     appName: string;
     defaultTurnaroundHours: number;
     lowStockAlerts: boolean;
+    requireFullPaymentBeforeDelivery: boolean;
   };
 }) {
   const [isPending, startTransition] = useTransition();
@@ -790,6 +791,15 @@ export function GeneralSettingsForm({
             onCheckedChange={(checked) => set({ lowStockAlerts: checked === true })}
           />
           Show low-stock alerts on the dashboard
+        </label>
+        <label className="flex items-end gap-2 pb-2 text-sm">
+          <Checkbox
+            checked={form.requireFullPaymentBeforeDelivery}
+            onCheckedChange={(checked) =>
+              set({ requireFullPaymentBeforeDelivery: checked === true })
+            }
+          />
+          Block delivery until the balance is fully paid
         </label>
       </div>
 

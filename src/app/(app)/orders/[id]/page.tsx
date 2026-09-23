@@ -90,6 +90,11 @@ export default async function OrderDetailPage({
   if (!order) notFound();
   assertBranchAccess(user, order.branchId);
 
+  const deliveryPolicy = await prisma.setting.findUnique({
+    where: { key: "require_full_payment_before_delivery" },
+  });
+  const requireFullPaymentBeforeDelivery = deliveryPolicy?.value === "true";
+
   const canSeeMoney = hasPermission(user, [
     PERMISSIONS.BILLING_VIEW,
     PERMISSIONS.DASHBOARD_VIEW_FINANCIALS,
@@ -224,6 +229,9 @@ export default async function OrderDetailPage({
               orderNumber={order.orderNumber}
               status={order.status}
               paidAmount={num(order.paidAmount)}
+              totalAmount={num(order.totalAmount)}
+              outstandingAmount={num(order.outstandingAmount)}
+              requireFullPaymentBeforeDelivery={requireFullPaymentBeforeDelivery}
               allowedStatuses={allowedStatuses}
               canUpdate={canUpdate}
               canCancel={canCancel}

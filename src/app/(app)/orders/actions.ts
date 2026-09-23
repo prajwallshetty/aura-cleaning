@@ -175,6 +175,17 @@ export async function setOrderStatusAction(payload: unknown): Promise<ActionResu
       );
     }
 
+    if (input.status === "DELIVERED" && num(order.outstandingAmount) > 0) {
+      const policy = await prisma.setting.findUnique({
+        where: { key: "require_full_payment_before_delivery" },
+      });
+      if (policy?.value === "true") {
+        throw new BusinessRuleError(
+          `${order.orderNumber} has a balance of ${formatCurrency(order.outstandingAmount)}. Collect full payment before marking it delivered.`,
+        );
+      }
+    }
+
     await prisma.$transaction((tx) =>
       setOrderStatus(tx, {
         orderId: order.id,

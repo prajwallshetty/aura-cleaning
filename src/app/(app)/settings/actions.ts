@@ -251,6 +251,11 @@ export async function saveSettingsAction(payload: unknown): Promise<ActionResult
         value: String(input.lowStockAlerts),
         category: "inventory",
       },
+      {
+        key: "require_full_payment_before_delivery",
+        value: String(input.requireFullPaymentBeforeDelivery),
+        category: "billing",
+      },
     ];
 
     await prisma.$transaction(

@@ -24,6 +24,14 @@ const METHOD_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PAID: "PAID",
+  PARTIALLY_PAID: "PARTIAL",
+  UNPAID: "UNPAID",
+  REFUNDED: "REFUNDED",
+  PARTIALLY_REFUNDED: "PARTIALLY REFUNDED",
+};
+
 export function ReceiptStudio({ sheet }: { sheet: TagSheet }) {
   const [widthMm, setWidthMm] = useState(80);
   const [customWidth, setCustomWidth] = useState("70");
@@ -267,6 +275,23 @@ function Receipt({ sheet, widthMm }: { sheet: TagSheet; widthMm: number }) {
       <div className="thermal-row" style={{ fontSize: `${11 * k}pt`, fontWeight: 800 }}>
         <span>BALANCE</span>
         <span>{formatCurrency(sheet.outstandingAmount)}</span>
+      </div>
+
+      <hr className="thermal-rule" />
+
+      {sheet.payments.length > 0 ? (
+        <div className="thermal-row">
+          <span>Payment</span>
+          <span>
+            {[...new Set(sheet.payments.map((p) => METHOD_LABELS[p.method] ?? p.method))].join(
+              " / ",
+            )}
+          </span>
+        </div>
+      ) : null}
+      <div className="thermal-row" style={{ fontWeight: 700 }}>
+        <span>Status</span>
+        <span>{PAYMENT_STATUS_LABELS[sheet.paymentStatus] ?? sheet.paymentStatus}</span>
       </div>
 
       <hr className="thermal-rule" />

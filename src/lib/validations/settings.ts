@@ -117,6 +117,7 @@ export const settingSchema = z.object({
   appName: z.string().trim().min(1).max(80),
   defaultTurnaroundHours: z.coerce.number().int().min(1).max(720).default(48),
   lowStockAlerts: z.boolean().default(true),
+  requireFullPaymentBeforeDelivery: z.boolean().default(false),
 });
 
 export const expenseSchema = z.object({

@@ -277,6 +277,21 @@
   gap: 2mm;
 }
 
+.thermal-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.thermal-row > span:first-child {
+  flex: 1 1 auto;
+}
+
+.thermal-row > span:last-child {
+  flex: 0 0 auto;
+  max-width: 60%;
+  text-align: right;
+}
+
 /* ==========================================================================
    Motion
    --------------------------------------------------------------------------

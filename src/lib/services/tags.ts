@@ -43,6 +43,7 @@ export interface TagSheet {
   totalAmount: number;
   paidAmount: number;
   outstandingAmount: number;
+  paymentStatus: string;
   specialInstructions: string | null;
   tagPrintCount: number;
   tagLastPrintedAt: string | null;
@@ -154,6 +155,7 @@ export async function getTagSheet(orderId: string): Promise<TagSheet> {
     totalAmount: num(order.totalAmount),
     paidAmount: num(order.paidAmount),
     outstandingAmount: num(order.outstandingAmount),
+    paymentStatus: order.paymentStatus,
     specialInstructions: order.specialInstructions,
     tagPrintCount: order.tagPrintCount,
     tagLastPrintedAt: order.tagLastPrintedAt?.toISOString() ?? null,

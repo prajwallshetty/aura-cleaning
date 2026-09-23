@@ -116,6 +116,8 @@ export default async function SettingsPage() {
                   byKey.get("default_turnaround_hours") ?? 48,
                 ),
                 lowStockAlerts: (byKey.get("low_stock_alerts") ?? "true") === "true",
+                requireFullPaymentBeforeDelivery:
+                  (byKey.get("require_full_payment_before_delivery") ?? "false") === "true",
               }}
             />
           </CardContent>
